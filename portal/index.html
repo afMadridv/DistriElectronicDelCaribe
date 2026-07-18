@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal DistriElectronicDelCaribe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23FFC400'/><text x='50' y='68' font-size='52' text-anchor='middle' font-family='Arial' font-weight='bold' fill='%23111'>D</text></svg>" />
+</head>
+<body>
+
+  <!-- ===== LOGIN ===== -->
+  <div id="view-login" class="login-screen hidden">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-mark">D</div>
+        <h1>DistriElectronic<span>DelCaribe</span></h1>
+        <p class="login-sub">Portal de Cotizaciones</p>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <label class="field">
+          <span>Usuario / Correo</span>
+          <input type="text" id="login-email" required autocomplete="username" placeholder="usuario@empresa.com" />
+        </label>
+        <label class="field">
+          <span>Contraseña</span>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••" />
+        </label>
+        <p id="login-error" class="form-error hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block" id="login-btn">Ingresar</button>
+      </form>
+      <p id="demo-hint" class="demo-hint hidden">Modo demo activo — usuario: <b>jefe@demo.com</b> / clave: <b>demo1234</b></p>
+    </div>
+  </div>
+
+  <!-- ===== APP SHELL ===== -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark sm">D</div>
+        <div class="brand-text">
+          <strong>DistriElectronic</strong>
+          <small>DelCaribe</small>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="generar">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+          Generar Cotización
+        </button>
+        <button class="nav-item" data-view="historial">
+          <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+          Historial / Editar
+        </button>
+        <button class="nav-item hidden" data-view="usuarios" id="nav-usuarios">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+          Usuarios
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <div class="user-info">
+            <strong id="user-name">—</strong>
+            <small id="user-role">—</small>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-block" id="logout-btn">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- ===== GENERAR ===== -->
+      <section id="view-generar" class="view">
+        <header class="view-header">
+          <h2>Generar Cotización</h2>
+          <p>Selecciona un formato y completa los datos. El PDF se genera al instante.</p>
+        </header>
+
+        <div id="format-picker" class="format-grid"></div>
+
+        <div id="form-wrap" class="form-wrap hidden">
+          <div class="form-topbar">
+            <button class="btn btn-ghost" id="back-to-formats">← Cambiar formato</button>
+            <span class="format-badge" id="current-format-name"></span>
+          </div>
+          <div class="form-layout">
+            <div class="form-panel">
+              <form id="dynamic-form"></form>
+              <div class="form-actions">
+                <button class="btn btn-primary" id="generate-btn">
+                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+                  <span id="generate-btn-label">Generar PDF</span>
+                </button>
+                <span id="save-status" class="save-status"></span>
+              </div>
+            </div>
+            <div class="preview-panel">
+              <div class="preview-head">
+                <span>Vista previa</span>
+                <button class="btn btn-ghost btn-sm" id="refresh-preview">Actualizar</button>
+              </div>
+              <iframe id="pdf-preview" title="Vista previa del PDF"></iframe>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HISTORIAL ===== -->
+      <section id="view-historial" class="view hidden">
+        <header class="view-header">
+          <h2>Historial de Cotizaciones</h2>
+          <p>Edita cualquier cotización sin rellenar todo de nuevo.</p>
+        </header>
+        <div class="toolbar">
+          <input type="search" id="search-historial" class="search-input" placeholder="Buscar por cliente, formato o número…" />
+        </div>
+        <div id="historial-list" class="historial-list"></div>
+      </section>
+
+      <!-- ===== USUARIOS ===== -->
+      <section id="view-usuarios" class="view hidden">
+        <header class="view-header">
+          <h2>Gestión de Usuarios</h2>
+          <p>Crea, edita y elimina trabajadores. Solo visible para Jefes.</p>
+        </header>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="new-user-btn">+ Nuevo trabajador</button>
+        </div>
+        <div id="users-list" class="users-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== MODAL USUARIO ===== -->
+  <div id="user-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h3 id="user-modal-title">Nuevo trabajador</h3>
+      <form id="user-form">
+        <label class="field"><span>Nombre completo</span><input type="text" id="uf-name" required /></label>
+        <label class="field"><span>Correo</span><input type="email" id="uf-email" required /></label>
+        <label class="field" id="uf-password-field"><span>Contraseña</span><input type="password" id="uf-password" minlength="6" placeholder="Mínimo 6 caracteres" /></label>
+        <label class="field"><span>Rol</span>
+          <select id="uf-role"><option value="trabajador">Trabajador</option><option value="jefe">Jefe</option></select>
+        </label>
+        <p id="user-form-error" class="form-error hidden"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== MODAL CONFIRMAR ===== -->
+  <div id="confirm-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3 id="confirm-title">¿Confirmar?</h3>
+      <p id="confirm-text" class="confirm-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <button type="button" class="btn btn-danger" id="confirm-ok">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/formats.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

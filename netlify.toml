@@ -1,0 +1,11 @@
+# Netlify — Portal DistriElectronicDelCaribe
+# Sitio estático: se publica la carpeta portal/ tal cual.
+[build]
+  publish = "portal"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
