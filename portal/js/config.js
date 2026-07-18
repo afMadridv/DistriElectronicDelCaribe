@@ -7,7 +7,7 @@
    navegador con localStorage).
    ============================================================ */
 window.APP_CONFIG = {
-  SUPABASE_URL: "",      // ej: "https://xxxx.supabase.co"
+  SUPABASE_URL: "https://diramayapswiqwtlcqid.supabase.co",
   SUPABASE_ANON_KEY: "", // ej: "eyJhbGciOi..."
   STORAGE_BUCKET: "cotizacion-images",
   COMPANY: {
