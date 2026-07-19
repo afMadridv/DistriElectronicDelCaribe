@@ -22,12 +22,17 @@
       </div>
       <form id="login-form" autocomplete="on">
         <label class="field">
-          <span>Usuario / Correo</span>
-          <input type="text" id="login-email" required autocomplete="username" placeholder="usuario@empresa.com" />
+          <span>Usuario</span>
+          <input type="text" id="login-email" required autocomplete="username" placeholder="lalfonso" />
+          <small class="field-hint">Solo tu usuario: el dominio @distrielectronicdelcaribe.com se agrega solo.</small>
         </label>
         <label class="field">
           <span>Contraseña</span>
           <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••" />
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="login-keep" checked />
+          <span>Mantener sesión iniciada</span>
         </label>
         <p id="login-error" class="form-error hidden"></p>
         <button type="submit" class="btn btn-primary btn-block" id="login-btn">Ingresar</button>
@@ -145,7 +150,8 @@
       <h3 id="user-modal-title">Nuevo trabajador</h3>
       <form id="user-form">
         <label class="field"><span>Nombre completo</span><input type="text" id="uf-name" required /></label>
-        <label class="field"><span>Correo</span><input type="email" id="uf-email" required /></label>
+        <label class="field"><span>Usuario o correo</span><input type="text" id="uf-email" required placeholder="lalfonso" />
+          <small class="field-hint">Sin @: se agrega @distrielectronicdelcaribe.com automáticamente.</small></label>
         <label class="field" id="uf-password-field"><span>Contraseña</span><input type="password" id="uf-password" minlength="6" placeholder="Mínimo 6 caracteres" /></label>
         <label class="field"><span>Rol</span>
           <select id="uf-role"><option value="trabajador">Trabajador</option><option value="jefe">Jefe</option></select>

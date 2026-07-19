@@ -77,7 +77,11 @@
     btn.disabled = true;
     btn.textContent = "Ingresando…";
     try {
-      const profile = await Store.login($("#login-email").value.trim(), $("#login-password").value);
+      const profile = await Store.login(
+        $("#login-email").value.trim(),
+        $("#login-password").value,
+        $("#login-keep").checked
+      );
       enterApp(profile);
     } catch (ex) {
       err.textContent = ex.message || "No fue posible iniciar sesión.";
@@ -738,7 +742,7 @@
     e.preventDefault();
     const payload = {
       name: $("#uf-name").value.trim(),
-      email: $("#uf-email").value.trim(),
+      email: Store.normalizeEmail($("#uf-email").value.trim()),
       password: $("#uf-password").value,
       role: $("#uf-role").value,
     };

@@ -14,6 +14,19 @@
   function lsSet(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
   function uid() { return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
 
+  /* "lalfonso" → "lalfonso@distrielectronicdelcaribe.com" */
+  function normalizeEmail(input) {
+    const v = String(input || "").trim();
+    return v && !v.includes("@") ? v + "@distrielectronicdelcaribe.com" : v;
+  }
+
+  /* cliente supabase con almacenamiento según "mantener sesión" */
+  function makeClient(keep) {
+    return window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY, {
+      auth: { storage: keep ? window.localStorage : window.sessionStorage },
+    });
+  }
+
   /* Comprime una imagen a JPEG máx 1200px para que cargue rápido */
   function compressImage(file, maxSize = 1200, quality = 0.8) {
     return new Promise((resolve, reject) => {
@@ -77,7 +90,7 @@
         }
         return currentProfile;
       }
-      sb = window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+      sb = makeClient(localStorage.getItem("dec_keep") !== "0");
       const { data: { session } } = await sb.auth.getSession();
       if (session) currentProfile = await this._loadProfile(session.user.id);
       return currentProfile;
@@ -92,7 +105,10 @@
     },
 
     /* ---------- autenticación ---------- */
-    async login(email, password) {
+    normalizeEmail,
+
+    async login(rawEmail, password, keep = true) {
+      const email = normalizeEmail(rawEmail);
       if (this.isDemo) {
         const user = lsGet(DEMO_KEYS.users, []).find(
           (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
@@ -102,6 +118,8 @@
         lsSet(DEMO_KEYS.session, { id: user.id });
         return currentProfile;
       }
+      localStorage.setItem("dec_keep", keep ? "1" : "0");
+      sb = makeClient(keep);
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw new Error("Usuario o contraseña incorrectos.");
       currentProfile = await this._loadProfile(data.user.id);
