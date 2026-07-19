@@ -254,9 +254,15 @@ const PDFGen = {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   },
+  /* Blob URL en lugar de data-URI: los data-URI grandes (plantilla A.A ~8MB)
+     superan el límite del iframe en Chrome y la vista previa sale en blanco. */
+  _lastPreviewURL: null,
   async previewDataURL(formatKey, record) {
     const doc = await build(formatKey, record);
-    return doc.saveAsBase64({ dataUri: true });
+    const bytes = await doc.save();
+    if (this._lastPreviewURL) URL.revokeObjectURL(this._lastPreviewURL);
+    this._lastPreviewURL = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    return this._lastPreviewURL;
   },
 };
 

@@ -395,8 +395,7 @@
 
     const canvas = wrap.querySelector("canvas");
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // fondo transparente: así la firma no tapa el texto del PDF
     ctx.strokeStyle = "#141414";
     ctx.lineWidth = 2.4;
     ctx.lineCap = "round";
@@ -443,8 +442,7 @@
     canvas.addEventListener("pointerleave", stop);
 
     wrap.querySelector(".sig-clear").addEventListener("click", () => {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       state.drawn = false;
       state.existing = null;
       schedulePreview();

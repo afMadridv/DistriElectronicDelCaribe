@@ -314,8 +314,8 @@ const PLANTILLAS = {
         opts: { "Bueno": 545, "Regular": 564, "Malo": 583 } },
     ],
     sigs: [
-      { key: "firma_tecnico", page: 0, x: 160, y: 110, h: 26, maxW: 150 },
-      { key: "firma", page: 0, x: 415, y: 110, h: 26, maxW: 150 },
+      { key: "firma_tecnico", page: 0, x: 165, y: 109, h: 19, maxW: 120 },
+      { key: "firma", page: 0, x: 420, y: 109, h: 19, maxW: 120 },
     ],
   },
 
