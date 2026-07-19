@@ -12,6 +12,7 @@
   let formImages = {};        // { fieldKey: [url|dataURL, ...] }
   let signatures = {};        // { fieldKey: { canvas, drawn, existing } }
   let previewTimer = null;
+  let formDirty = false;      // cambios sin guardar en el formulario
 
   /* ---------- helpers UI ---------- */
   function toast(msg, type = "ok") {
@@ -88,9 +89,38 @@
   });
 
   $("#logout-btn").addEventListener("click", async () => {
+    const ok = await showConfirm("Cerrar sesión", "¿Seguro que deseas salir del portal?", "Cerrar sesión");
+    if (!ok) return;
     await Store.logout();
     location.reload();
   });
+
+  /* aviso nativo al recargar o cerrar la pestaña con cambios sin guardar */
+  window.addEventListener("beforeunload", (e) => {
+    if (formDirty && !$("#form-wrap").classList.contains("hidden")) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+
+  /* modal propio para navegación interna con cambios sin guardar */
+  function guardExit(proceed) {
+    if (!formDirty || $("#form-wrap").classList.contains("hidden")) { proceed(); return; }
+    const modal = $("#exit-modal");
+    modal.classList.remove("hidden");
+    const close = () => {
+      modal.classList.add("hidden");
+      $("#exit-save").onclick = $("#exit-discard").onclick = null;
+      modal.querySelector("[data-close-modal]").onclick = null;
+    };
+    $("#exit-save").onclick = async () => {
+      const ok = await saveCotizacion(false);
+      close();
+      if (ok) proceed();
+    };
+    $("#exit-discard").onclick = () => { formDirty = false; close(); proceed(); };
+    modal.querySelector("[data-close-modal]").onclick = close;
+  }
 
   /* ============================================================
      NAVEGACIÓN
@@ -103,7 +133,7 @@
     if (view === "usuarios") renderUsers();
   }
 
-  $$(".nav-item").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
+  $$(".nav-item").forEach((b) => b.addEventListener("click", () => guardExit(() => switchView(b.dataset.view))));
 
   /* ============================================================
      GENERAR — selector de formato
@@ -121,9 +151,11 @@
   }
 
   $("#back-to-formats").addEventListener("click", () => {
-    $("#form-wrap").classList.add("hidden");
-    $("#format-picker").classList.remove("hidden");
-    editingRecord = null;
+    guardExit(() => {
+      $("#form-wrap").classList.add("hidden");
+      $("#format-picker").classList.remove("hidden");
+      editingRecord = null;
+    });
   });
 
   /* ============================================================
@@ -223,7 +255,9 @@
     if (fechaInput && !fechaInput.value) fechaInput.value = new Date().toISOString().slice(0, 10);
 
     form.addEventListener("input", schedulePreview);
-    schedulePreview();
+    formDirty = false;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => { refreshPreview(); formDirty = false; }, 100);
     $("#view-generar").scrollIntoView({ behavior: "smooth", block: "start" });
     switchView("generar");
   }
@@ -467,6 +501,7 @@
   }
 
   function schedulePreview() {
+    formDirty = true;
     clearTimeout(previewTimer);
     previewTimer = setTimeout(refreshPreview, 500);
   }
@@ -484,7 +519,10 @@
   }
   $("#refresh-preview").addEventListener("click", refreshPreview);
 
-  $("#generate-btn").addEventListener("click", async () => {
+  $("#generate-btn").addEventListener("click", () => saveCotizacion(true));
+
+  /* guarda la cotización; download=false para "guardar y salir" */
+  async function saveCotizacion(download = true) {
     const format = FORMATS[currentFormat];
     // valida requeridos
     for (const f of format.fields) {
@@ -494,7 +532,7 @@
           el.focus();
           el.reportValidity ? el.reportValidity() : null;
           toast(`Completa el campo: ${f.label}`, "error");
-          return;
+          return false;
         }
       }
     }
@@ -526,17 +564,20 @@
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
       }
 
-      await PDFGen.download(currentFormat, record);
+      if (download) await PDFGen.download(currentFormat, record);
+      formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
-      toast(`PDF ${record.numero} generado y guardado.`);
+      toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
+      return true;
     } catch (e) {
       console.error(e);
       $("#save-status").textContent = "";
       toast(e.message || "Error al generar el PDF.", "error");
+      return false;
     } finally {
       btn.disabled = false;
     }
-  });
+  }
 
   /* ============================================================
      HISTORIAL

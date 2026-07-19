@@ -155,6 +155,19 @@
     </div>
   </div>
 
+  <!-- ===== MODAL SALIR SIN GUARDAR ===== -->
+  <div id="exit-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Tienes cambios sin guardar</h3>
+      <p class="confirm-text">Si sales ahora, el progreso de esta cotización se perderá.</p>
+      <div class="modal-actions modal-actions-stack">
+        <button type="button" class="btn btn-primary" id="exit-save">Guardar cambios y salir</button>
+        <button type="button" class="btn btn-danger" id="exit-discard">Salir sin guardar</button>
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== MODAL CONFIRMAR ===== -->
   <div id="confirm-modal" class="modal-overlay hidden">
     <div class="modal modal-sm">

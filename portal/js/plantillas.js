@@ -24,21 +24,21 @@ const PLANTILLAS = {
   actividades: {
     file: "FORMATO DE ACTIVIDADES.pdf",
     text: [
-      { key: "cliente", page: 0, x: 140, y: 710, size: 9, maxW: 165 },
-      { key: "ciudad", page: 0, x: 380, y: 710, size: 9, maxW: 130 },
-      { key: "direccion", page: 0, x: 148, y: 692, size: 9, maxW: 160 },
-      { key: "fecha", page: 0, x: 370, y: 692, size: 9, maxW: 140, date: true },
-      { key: "hora_servicio", page: 0, x: 95, y: 82, size: 9, maxW: 150 },
+      { key: "cliente", page: 0, x: 140, y: 712.5, size: 9, maxW: 165 },
+      { key: "ciudad", page: 0, x: 380, y: 712.5, size: 9, maxW: 130 },
+      { key: "direccion", page: 0, x: 148, y: 694.5, size: 9, maxW: 160 },
+      { key: "fecha", page: 0, x: 370, y: 694.5, size: 9, maxW: 140, date: true },
+      { key: "hora_servicio", page: 0, x: 100, y: 96, size: 9, maxW: 145 },
       { key: "nombre_funcionario", page: 0, x: 100, y: 112, size: 8 },
       { key: "nombre_trabajador", page: 0, x: 355, y: 112, size: 8 },
     ],
     items: [
-      { key: "actividades", page: 0, cantX: 108, descX: 158, y0: 648, step: 11.3, max: 17, descMaxW: 380, size: 8 },
-      { key: "materiales", page: 0, cantX: 108, descX: 158, y0: 406.5, step: 11.3, max: 19, descMaxW: 380, size: 8 },
+      { key: "actividades", page: 0, cantX: 108, descX: 158, y0: 640, step: 11.3, max: 17, descMaxW: 380, size: 8 },
+      { key: "materiales", page: 0, cantX: 108, descX: 158, y0: 409, step: 11.3, max: 19, descMaxW: 380, size: 8 },
     ],
     sigs: [
-      { key: "firma_funcionario", page: 0, x: 100, y: 126, h: 30, maxW: 130 },
-      { key: "firma_trabajador", page: 0, x: 355, y: 126, h: 30, maxW: 130 },
+      { key: "firma_funcionario", page: 0, x: 110, y: 134, h: 22, maxW: 95 },
+      { key: "firma_trabajador", page: 0, x: 365, y: 134, h: 22, maxW: 95 },
     ],
   },
 
