@@ -8,7 +8,7 @@
    ============================================================ */
 window.APP_CONFIG = {
   SUPABASE_URL: "https://diramayapswiqwtlcqid.supabase.co",
-  SUPABASE_ANON_KEY: "", // ej: "eyJhbGciOi..."
+  SUPABASE_ANON_KEY: "sb_publishable_BgzwCb3JW7Snef3JURtJAw_e_z2gjr5",
   STORAGE_BUCKET: "cotizacion-images",
   COMPANY: {
     name: "DISTRIELECTRONIC DEL CARIBE LTDA.",

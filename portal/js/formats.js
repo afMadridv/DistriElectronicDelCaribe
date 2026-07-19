@@ -17,7 +17,7 @@ const CHK_BRM = ["Bueno", "Regular", "Malo"];
 
 window.FORMATS = {
   actividades: {
-    name: "Formato de Actividades",
+    name: "FORMATO DE ACTIVIDADES",
     icon: "📋",
     desc: "Actividades realizadas y material utilizado en un servicio.",
     docTitle: "FORMATO DE ACTIVIDADES",
@@ -44,7 +44,7 @@ window.FORMATS = {
   },
 
   ups: {
-    name: "Reporte Técnico UPS",
+    name: "Formato Mantenimiento de UPS 2017",
     icon: "🔋",
     desc: "Diagnóstico, mantenimiento o instalación de UPS con medidas eléctricas.",
     docTitle: "REPORTE TÉCNICO — UPS",
@@ -154,7 +154,7 @@ window.FORMATS = {
   },
 
   plantas: {
-    name: "Mantenimiento Plantas Eléctricas",
+    name: "FORMATO MANTENIMIENTO PLANTAS ELCTRICAS",
     icon: "⚡",
     desc: "Reporte de mantenimiento preventivo de plantas eléctricas.",
     docTitle: "REPORTE DE MANTENIMIENTO PREVENTIVO DE PLANTAS ELÉCTRICAS",
@@ -276,7 +276,7 @@ window.FORMATS = {
   },
 
   aire: {
-    name: "Mantenimiento Aire Acondicionado",
+    name: "REPORTE TECNICO - A.A - DISTRI",
     icon: "❄️",
     desc: "Informe técnico de mantenimiento de equipos de aire acondicionado.",
     docTitle: "MANTENIMIENTO EQUIPOS DE AIRE ACONDICIONADO",
@@ -343,7 +343,7 @@ window.FORMATS = {
   },
 
   cctv: {
-    name: "Reporte Técnico CCTV",
+    name: "REPORTE TECNICO CCTV",
     icon: "📹",
     desc: "Revisión y mantenimiento de cámaras y sistemas CCTV.",
     docTitle: "REPORTE TÉCNICO CCTV",
