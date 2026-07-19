@@ -4,3 +4,7 @@
 
 ///Portal///
 -Al momento de cerrar sesion ellos le den confirmar al salir del portal
+
+
+///Cotizacion///
+La vista previa se vea después, es decir de la opcion de generar pdf, haya un boton que diga vista previa, al presionarlo se rellena automaticamnete los campos y podemos ver la lista previa, lo digo pq al momento que se actualice en tiempo real cada vez que yo lleno un campo, pone el portal lento y puede crashear algun dispositivo

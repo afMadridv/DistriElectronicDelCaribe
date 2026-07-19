@@ -91,6 +91,10 @@
             <div class="form-panel">
               <form id="dynamic-form"></form>
               <div class="form-actions">
+                <button class="btn btn-ghost" id="preview-btn">
+                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+                  Vista previa
+                </button>
                 <button class="btn btn-primary" id="generate-btn">
                   <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
                   <span id="generate-btn-label">Generar PDF</span>
@@ -98,7 +102,7 @@
                 <span id="save-status" class="save-status"></span>
               </div>
             </div>
-            <div class="preview-panel">
+            <div class="preview-panel hidden" id="preview-panel">
               <div class="preview-head">
                 <span>Vista previa</span>
                 <button class="btn btn-ghost btn-sm" id="refresh-preview">Actualizar</button>

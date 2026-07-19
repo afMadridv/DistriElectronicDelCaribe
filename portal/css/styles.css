@@ -171,8 +171,9 @@ body {
   display: flex; align-items: center; justify-content: center;
   font-size: 21px; margin-bottom: 14px;
 }
-.format-card h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 4px; }
-.format-card p { font-size: 13px; color: var(--gray-500); }
+.format-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+.format-card .fc-icon { margin-bottom: 6px; }
+.format-card h3 { font-size: 14.5px; font-weight: 700; line-height: 1.35; }
 
 /* ---------- Dynamic form ---------- */
 .form-wrap { margin-top: 4px; }

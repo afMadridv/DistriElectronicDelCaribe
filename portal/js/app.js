@@ -144,7 +144,6 @@
       <button class="format-card" data-format="${key}">
         <div class="fc-icon">${f.icon}</div>
         <h3>${f.name}</h3>
-        <p>${f.desc}</p>
       </button>`).join("");
     grid.querySelectorAll(".format-card").forEach((c) =>
       c.addEventListener("click", () => openForm(c.dataset.format, null)));
@@ -256,8 +255,8 @@
 
     form.addEventListener("input", schedulePreview);
     formDirty = false;
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => { refreshPreview(); formDirty = false; }, 100);
+    $("#preview-panel").classList.add("hidden");
+    $("#pdf-preview").removeAttribute("src");
     $("#view-generar").scrollIntoView({ behavior: "smooth", block: "start" });
     switchView("generar");
   }
@@ -500,14 +499,15 @@
     return data;
   }
 
+  /* ya no refresca en vivo: solo marca cambios pendientes.
+     La vista previa se genera a demanda con el botón "Vista previa". */
   function schedulePreview() {
     formDirty = true;
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(refreshPreview, 500);
   }
 
   async function refreshPreview() {
     if (!currentFormat) return;
+    $("#preview-panel").classList.remove("hidden");
     try {
       const record = {
         numero: editingRecord ? editingRecord.numero : `${FORMATS[currentFormat].prefix}-BORRADOR`,
@@ -518,6 +518,15 @@
     } catch (e) { console.error("preview:", e); }
   }
   $("#refresh-preview").addEventListener("click", refreshPreview);
+
+  $("#preview-btn").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await refreshPreview();
+      $("#preview-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } finally { btn.disabled = false; }
+  });
 
   $("#generate-btn").addEventListener("click", () => saveCotizacion(true));
 
