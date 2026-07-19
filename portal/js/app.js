@@ -304,7 +304,7 @@
     wrap.innerHTML = `
       <span>${f.label}</span>
       <div class="img-thumbs"></div>
-      <div class="img-drop">📷 Haz clic para agregar imágenes (se comprimen automáticamente)</div>
+      <div class="img-drop"><span class="drop-icon">${window.ICONS.camera}</span> Haz clic para agregar imágenes (se comprimen automáticamente)</div>
       <input type="file" accept="image/*" multiple class="hidden img-input" />`;
 
     const thumbs = wrap.querySelector(".img-thumbs");
@@ -567,13 +567,13 @@
     });
 
     if (!rows.length) {
-      list.innerHTML = `<div class="empty-state"><div class="es-icon">🗂️</div>
+      list.innerHTML = `<div class="empty-state"><div class="es-icon">${window.ICONS.folder}</div>
         ${q ? "Sin resultados para la búsqueda." : "Aún no hay cotizaciones. Genera la primera desde «Generar Cotización»."}</div>`;
       return;
     }
 
     list.innerHTML = rows.map((c) => {
-      const fmt = FORMATS[c.format_type] || { icon: "📄", name: c.format_type };
+      const fmt = FORMATS[c.format_type] || { icon: window.ICONS.folder, name: c.format_type };
       const fecha = new Date(c.updated_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
       return `
       <div class="hist-card" data-id="${c.id}">
@@ -586,7 +586,7 @@
         <div class="hist-actions">
           <button class="btn btn-primary btn-sm" data-act="edit">Editar</button>
           <button class="btn btn-ghost btn-sm" data-act="pdf">PDF</button>
-          <button class="icon-btn danger" data-act="del" title="Eliminar">🗑</button>
+          <button class="icon-btn danger" data-act="del" title="Eliminar">${window.ICONS.trash}</button>
         </div>
       </div>`;
     }).join("");
@@ -645,8 +645,8 @@
           <span class="role-tag ${u.role}">${u.role}</span>
         </div>
         <div class="uc-actions">
-          <button class="icon-btn" data-act="edit" title="Editar">✎</button>
-          ${u.id !== me.id ? '<button class="icon-btn danger" data-act="del" title="Eliminar">🗑</button>' : ""}
+          <button class="icon-btn" data-act="edit" title="Editar">${window.ICONS.edit}</button>
+          ${u.id !== me.id ? `<button class="icon-btn danger" data-act="del" title="Eliminar">${window.ICONS.trash}</button>` : ""}
         </div>
       </div>`).join("");
 

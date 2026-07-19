@@ -321,6 +321,15 @@ body {
 .icon-btn:hover { border-color: var(--black); color: var(--black); }
 .icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 
+/* ---------- Iconos SVG ---------- */
+.fc-icon svg { width: 22px; height: 22px; }
+.hist-icon svg { width: 20px; height: 20px; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn svg { width: 15px; height: 15px; }
+.es-icon svg { width: 34px; height: 34px; color: var(--gray-500); }
+.es-icon { margin-bottom: 10px; }
+.drop-icon svg { width: 18px; height: 18px; vertical-align: -4px; margin-right: 4px; }
+
 /* ---------- Modals ---------- */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 100;

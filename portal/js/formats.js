@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Definición de los 5 formatos reales de DistriElectronic
    (basados en los PDF guía de la carpeta /pdfs).
 
@@ -15,10 +15,25 @@ const CHK_ESTADO = ["Bien", "Mal", "Regular", "N/A", "NAC", "NP"];
 const CHK_SINO = ["Sí", "No"];
 const CHK_BRM = ["Bueno", "Regular", "Malo"];
 
+/* Iconos SVG (trazo, estilo Feather) */
+const svg = (paths) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+window.ICONS = {
+  clipboard: svg('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/>'),
+  battery: svg('<rect x="2" y="7" width="16" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><line x1="6" y1="10" x2="6" y2="14"/><line x1="10" y1="10" x2="10" y2="14"/>'),
+  zap: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+  snow: svg('<line x1="12" y1="2" x2="12" y2="22"/><line x1="3.3" y1="7" x2="20.7" y2="17"/><line x1="20.7" y1="7" x2="3.3" y2="17"/>'),
+  video: svg('<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'),
+  trash: svg('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  edit: svg('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'),
+  camera: svg('<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'),
+  folder: svg('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'),
+};
+
 window.FORMATS = {
   actividades: {
     name: "FORMATO DE ACTIVIDADES",
-    icon: "📋",
+    icon: window.ICONS.clipboard,
     desc: "Actividades realizadas y material utilizado en un servicio.",
     docTitle: "FORMATO DE ACTIVIDADES",
     prefix: "ACT",
@@ -45,7 +60,7 @@ window.FORMATS = {
 
   ups: {
     name: "Formato Mantenimiento de UPS 2017",
-    icon: "🔋",
+    icon: window.ICONS.battery,
     desc: "Diagnóstico, mantenimiento o instalación de UPS con medidas eléctricas.",
     docTitle: "REPORTE TÉCNICO — UPS",
     prefix: "OTT",
@@ -155,7 +170,7 @@ window.FORMATS = {
 
   plantas: {
     name: "FORMATO MANTENIMIENTO PLANTAS ELCTRICAS",
-    icon: "⚡",
+    icon: window.ICONS.zap,
     desc: "Reporte de mantenimiento preventivo de plantas eléctricas.",
     docTitle: "REPORTE DE MANTENIMIENTO PREVENTIVO DE PLANTAS ELÉCTRICAS",
     prefix: "PLE",
@@ -277,7 +292,7 @@ window.FORMATS = {
 
   aire: {
     name: "REPORTE TECNICO - A.A - DISTRI",
-    icon: "❄️",
+    icon: window.ICONS.snow,
     desc: "Informe técnico de mantenimiento de equipos de aire acondicionado.",
     docTitle: "MANTENIMIENTO EQUIPOS DE AIRE ACONDICIONADO",
     prefix: "AA",
@@ -344,7 +359,7 @@ window.FORMATS = {
 
   cctv: {
     name: "REPORTE TECNICO CCTV",
-    icon: "📹",
+    icon: window.ICONS.video,
     desc: "Revisión y mantenimiento de cámaras y sistemas CCTV.",
     docTitle: "REPORTE TÉCNICO CCTV",
     prefix: "CCTV",
