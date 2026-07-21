@@ -32,9 +32,13 @@ for (const key of Object.keys(FORMATS)) {
 
   /* claves que la plantilla imprime */
   const pdfKeys = new Set();
-  (plantilla.text || []).forEach((t) => pdfKeys.add(t.key));
+  (plantilla.text || []).forEach((t) => {
+    pdfKeys.add(t.key);
+    (t.join || []).forEach((k) => pdfKeys.add(k));
+  });
   (plantilla.wrap || []).forEach((w) => pdfKeys.add(w.key));
   (plantilla.triple || []).forEach((t) => pdfKeys.add(t.key));
+  (plantilla.slots || []).forEach((s) => pdfKeys.add(s.key));
   (plantilla.items || []).forEach((i) => pdfKeys.add(i.key));
   (plantilla.sigs || []).forEach((s) => pdfKeys.add(s.key));
   (plantilla.marks || []).forEach((m) => pdfKeys.add(m.src || m.key));

@@ -88,25 +88,50 @@ async function build(formatKey, record, opts = {}) {
   const pages = doc.getPages();
   const P = (i) => pages[Math.min(i, pages.length - 1)];
 
-  const drawText = (page, text, x, y, size, maxW, useBold) => {
+  /* center: centra el texto dentro de [x, x+maxW] — así los datos quedan
+     centrados sobre la línea del formato, como en los reportes en limpio. */
+  const drawText = (page, text, x, y, size, maxW, useBold, center) => {
     if (text == null || text === "") return;
-    page.drawText(fit(useBold ? bold : font, text, size, maxW), {
-      x, y, size, font: useBold ? bold : font, color: INK,
-    });
+    const f = useBold ? bold : font;
+    let t = String(text), s = size;
+    if (maxW) {
+      /* antes de recortar se reduce la letra: así los valores largos
+         siguen leyéndose completos dentro de su casilla */
+      const min = Math.max(4.5, size * 0.6);
+      while (s > min && f.widthOfTextAtSize(t, s) > maxW) s -= 0.25;
+      t = fit(f, t, s, maxW);
+    }
+    const dx = center && maxW ? Math.max(0, (maxW - f.widthOfTextAtSize(t, s)) / 2) : 0;
+    page.drawText(t, { x: x + dx, y, size: s, font: f, color: INK });
   };
+  /* (x,y) es el CENTRO de la casilla: la X se centra sobre ese punto para
+     que nunca sobresalga del recuadro. 0.717 es la altura de mayúscula
+     de Helvetica-Bold, así que y - 0.717*size/2 deja la X centrada. */
   const drawX = (page, x, y, size = 8) => {
-    page.drawText("X", { x, y, size, font: bold, color: INK });
+    page.drawText("X", {
+      x: x - bold.widthOfTextAtSize("X", size) / 2,
+      y: y - size * 0.3585,
+      size, font: bold, color: INK,
+    });
   };
 
   /* número del documento */
   if (cfg.numero) {
-    for (const n of cfg.numero) drawText(P(n.page), record.numero || "", n.x, n.y, n.size || 10, 110, true);
+    for (const n of cfg.numero) {
+      drawText(P(n.page), record.numero || "", n.x, n.y, n.size || 10, n.maxW || 110, true, n.c);
+    }
   }
 
-  /* textos simples */
+  /* textos simples; join une varios campos en una misma línea */
   for (const t of cfg.text || []) {
-    const val = t.date ? fmtDate(data[t.key]) : data[t.key];
-    drawText(P(t.page), val, t.x, t.y, t.size || 8, t.maxW);
+    let val = t.date ? fmtDate(data[t.key]) : data[t.key];
+    if (t.join) {
+      val = [val, ...t.join.map((k) => data[k])]
+        .map((v) => (v == null ? "" : String(v).trim()))
+        .filter(Boolean)
+        .join(t.sep || " / ");
+    }
+    drawText(P(t.page), val, t.x, t.y, t.size || 8, t.maxW, false, t.c);
   }
 
   /* valores partidos por "/" (corrientes A/B/C, frecuencia, etc.) */
@@ -115,7 +140,17 @@ async function build(formatKey, record, opts = {}) {
     if (!val) continue;
     const parts = String(val).split("/").map((s) => s.trim());
     tr.ys.forEach((y, i) => {
-      if (parts[i]) drawText(P(tr.page), parts[i], tr.x, y, tr.size || 7, tr.maxW);
+      if (parts[i]) drawText(P(tr.page), parts[i], tr.x, y, tr.size || 7, tr.maxW, false, tr.c);
+    });
+  }
+
+  /* un valor partido por "/" repartido en casillas sueltas [x,y,ancho] */
+  for (const sl of cfg.slots || []) {
+    const val = data[sl.key];
+    if (!val) continue;
+    const parts = String(val).split("/").map((s) => s.trim());
+    sl.at.forEach(([x, y, w], i) => {
+      if (parts[i]) drawText(P(sl.page), parts[i], x, y, sl.size || 7, w, false, true);
     });
   }
 
@@ -134,7 +169,7 @@ async function build(formatKey, record, opts = {}) {
     const rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim()).slice(0, it.max);
     rows.forEach((r, i) => {
       const y = it.y0 - i * it.step;
-      drawText(P(it.page), String(r.cant ?? ""), it.cantX, y, it.size || 8, 35);
+      drawText(P(it.page), String(r.cant ?? ""), it.cantX, y, it.size || 8, it.cantW || 35, false, true);
       drawText(P(it.page), r.descripcion, it.descX, y, it.size || 8, it.descMaxW);
     });
   }
@@ -191,12 +226,14 @@ async function build(formatKey, record, opts = {}) {
     if (rows.length) {
       const bt = cfg.baterias;
       const page = P(bt.page);
-      drawText(page, record.numero || "", bt.numero.x, bt.numero.y, bt.numero.size, 110, true);
+      const n = bt.numero;
+      drawText(page, record.numero || "", n.x, n.y, n.size, n.maxW || 110, true, n.c);
       rows.slice(0, bt.max * bt.xBanks.length).forEach((r, i) => {
         const bank = Math.floor(i / bt.max);
         const row = i % bt.max;
-        if (row === 0) drawText(page, String(bank + 1), bt.bancoNoX[bank], bt.bancoNoY, 8, 20, true);
-        drawText(page, r.descripcion, bt.xBanks[bank], bt.yTop - row * bt.step, bt.size, 80);
+        if (row === 0) drawText(page, String(bank + 1), bt.bancoNoX[bank], bt.bancoNoY, 8, 18, true, true);
+        /* la plantilla ya trae numerada cada batería: solo va el voltaje */
+        drawText(page, r.descripcion, bt.xBanks[bank], bt.yTop - row * bt.step, bt.size, bt.colW || 70, false, true);
       });
     }
   }
@@ -208,9 +245,9 @@ async function build(formatKey, record, opts = {}) {
     const img = await embedImg(doc, src);
     if (!img) continue;
     const scale = Math.min(s.h / img.height, s.maxW / img.width);
-    P(s.page).drawImage(img, {
-      x: s.x, y: s.y, width: img.width * scale, height: img.height * scale,
-    });
+    const w = img.width * scale, h = img.height * scale;
+    /* cx centra la firma sobre la línea en vez de anclarla por la izquierda */
+    P(s.page).drawImage(img, { x: s.cx != null ? s.cx - w / 2 : s.x, y: s.y, width: w, height: h });
   }
 
   /* evidencia fotográfica: páginas extra al final (no toca la plantilla) */

@@ -2,16 +2,26 @@
    Mapa de coordenadas para rellenar las plantillas PDF
    originales (pdf-lib, origen abajo-izquierda, puntos).
 
+   Las coordenadas salen de medir la propia plantilla: cada dato cae
+   justo encima de su línea de relleno y dentro del ancho disponible.
+
    Tipos:
-   - numero: {page,x,y,size}
-   - text:   [{key,page,x,y,size,maxW, date?}]
+   - numero: [{page,x,y,size,maxW,c}]
+   - text:   [{key,page,x,y,size,maxW, date?, c?, join?, sep?}]
    - wrap:   [{key,page,x,y0,lh,maxW,size,maxLines}]  texto multilínea
-   - triple: [{key,page,x,ys:[...],maxW,size}]        valor partido por "/"
-   - items:  [{key,page,cantX,descX,y0,step,max,descMaxW,size}]
-   - marks:  [{key,page,map:{valor:[[x,y],...]}}]     X según select
-   - grid:   [{key,page,rows:{fila:y},opts:{opcion:x}}] checklist
-   - sigs:   [{key,page,x,y,h,maxW}]                  imagen de firma
-   - baterias: {page,xBanks:[...],yTop,step,max}      tabla UPS pág.2
+   - triple: [{key,page,x,ys:[...],maxW,size,c}]      valor partido por "/"
+   - slots:  [{key,page,size,at:[[x,y,ancho],...]}]   valor "/" en casillas sueltas
+   - items:  [{key,page,cantX,cantW,descX,y0,step,max,descMaxW,size}]
+   - marks:  [{key,page,map:{valor:[[x,y],...]}}]     X centrada en (x,y)
+   - grid:   [{key,page,rows:{fila:y},opts:{opcion:x}}] checklist (centros)
+   - sigs:   [{key,page,x|cx,y,h,maxW}]               imagen de firma
+   - baterias: {page,xBanks:[...],colW,yTop,step,max} tabla UPS pág.2
+
+   Notas:
+   - c: 1        centra el valor dentro de [x, x+maxW]
+   - join: [...] concatena otros campos en la misma línea
+   - cx          centra la firma horizontalmente en ese punto
+   - en marks y grid, (x,y) es el CENTRO de la casilla, no su esquina
    ============================================================ */
 (function (root) {
 
@@ -20,342 +30,269 @@ const SI = "Sí", NO = "No";
 
 const PLANTILLAS = {
 
-  /* ================= FORMATO DE ACTIVIDADES (A4 595x842) ================= */
+  /* ===== FORMATO DE ACTIVIDADES (A4 595x842) ===== */
   actividades: {
     file: "FORMATO DE ACTIVIDADES.pdf",
     text: [
-      { key: "cliente", page: 0, x: 140, y: 712.5, size: 9, maxW: 165 },
-      { key: "ciudad", page: 0, x: 380, y: 712.5, size: 9, maxW: 130 },
-      { key: "direccion", page: 0, x: 148, y: 694.5, size: 9, maxW: 160 },
-      { key: "fecha", page: 0, x: 370, y: 694.5, size: 9, maxW: 140, date: true },
-      { key: "hora_servicio", page: 0, x: 100, y: 96, size: 9, maxW: 145 },
-      { key: "nombre_funcionario", page: 0, x: 100, y: 112, size: 8 },
-      { key: "nombre_trabajador", page: 0, x: 355, y: 112, size: 8 },
+      { key: "cliente", page: 0, x: 139.2, y: 714.2, size: 9, maxW: 181, c: 1 },
+      { key: "ciudad", page: 0, x: 369.8, y: 714.2, size: 9, maxW: 130.9, c: 1 },
+      { key: "direccion", page: 0, x: 148.7, y: 691.4, size: 9, maxW: 175.8, c: 1 },
+      { key: "fecha", page: 0, x: 367, y: 691.4, size: 9, maxW: 136, date: true, c: 1 },
+      { key: "hora_servicio", page: 0, x: 87.2, y: 90.4, size: 9, maxW: 145.6, c: 1 },
+      { key: "nombre_funcionario", page: 0, x: 85.1, y: 122, size: 8, maxW: 150, c: 1 },
+      { key: "nombre_trabajador", page: 0, x: 332.9, y: 122, size: 8, maxW: 155, c: 1 },
     ],
     items: [
-      { key: "actividades", page: 0, cantX: 108, descX: 158, y0: 640, step: 11.3, max: 17, descMaxW: 380, size: 8 },
-      { key: "materiales", page: 0, cantX: 108, descX: 158, y0: 409, step: 11.3, max: 19, descMaxW: 380, size: 8 },
+      { key: "actividades", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 642.3, step: 12, max: 16, descMaxW: 356, size: 8 },
+      { key: "materiales", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 410.2, step: 12, max: 18, descMaxW: 356, size: 8 },
     ],
     sigs: [
-      { key: "firma_funcionario", page: 0, x: 110, y: 134, h: 22, maxW: 95 },
-      { key: "firma_trabajador", page: 0, x: 365, y: 134, h: 22, maxW: 95 },
+      { key: "firma_funcionario", page: 0, cx: 160, y: 149, h: 26, maxW: 130 },
+      { key: "firma_trabajador", page: 0, cx: 410, y: 149, h: 26, maxW: 130 },
     ],
   },
 
-  /* ================= REPORTE TÉCNICO UPS (carta, 3 pág) ================= */
+  /* ===== REPORTE TÉCNICO UPS (carta, 3 pág) ===== */
   ups: {
     file: "Formato Mantenimiento de UPS 2017.pdf",
-    numero: [{ page: 0, x: 415, y: 678, size: 10 }, { page: 2, x: 415, y: 696, size: 10 }],
+    numero: [
+      { page: 0, x: 403.3, y: 680.7, size: 7.5, maxW: 78.5, c: 1 },
+      { page: 2, x: 403.3, y: 700.2, size: 7.5, maxW: 78.5, c: 1 },
+    ],
     text: [
-      { key: "cliente", page: 0, x: 112, y: 632, size: 8, maxW: 230 },
-      { key: "fecha", page: 0, x: 390, y: 632, size: 8, maxW: 115, date: true },
-      { key: "direccion", page: 0, x: 125, y: 615, size: 8, maxW: 200 },
-      { key: "oficina", page: 0, x: 112, y: 599, size: 8, maxW: 70 },
-      { key: "lugar", page: 0, x: 216, y: 599, size: 8, maxW: 100 },
-      { key: "ciudad", page: 0, x: 372, y: 599, size: 8, maxW: 120 },
-      { key: "marca", page: 0, x: 170, y: 582, size: 8, maxW: 110 },
-      { key: "modelo", page: 0, x: 345, y: 582, size: 8, maxW: 90 },
-      { key: "potencia", page: 0, x: 510, y: 582, size: 8, maxW: 60 },
-      { key: "serie", page: 0, x: 93, y: 565, size: 7, maxW: 42 },
-      { key: "inventario", page: 0, x: 163, y: 565, size: 7, maxW: 80 },
-      { key: "bancos_baterias", page: 0, x: 120, y: 548, size: 7, maxW: 60 },
-      { key: "referencia_baterias", page: 0, x: 382, y: 548, size: 7, maxW: 95 },
-      { key: "voltaje_entrada", page: 0, x: 138, y: 290, size: 6.5, maxW: 128 },
-      { key: "voltaje_salida", page: 0, x: 138, y: 236, size: 6.5, maxW: 128 },
-      { key: "voltaje_bypass", page: 0, x: 138, y: 180, size: 6.5, maxW: 128 },
-      { key: "voltaje_neutro_tierra", page: 0, x: 538, y: 241, size: 7, maxW: 38 },
-      { key: "corriente_neutro", page: 0, x: 538, y: 228, size: 7, maxW: 38 },
-      { key: "corriente_tierra", page: 0, x: 538, y: 214, size: 7, maxW: 38 },
-      { key: "temperatura", page: 0, x: 393, y: 160, size: 8, maxW: 32 },
-      { key: "voltaje_cargador", page: 0, x: 520, y: 163, size: 8, maxW: 55 },
-      { key: "corriente_cargador", page: 0, x: 520, y: 147, size: 8, maxW: 50 },
-      { key: "factor_potencia", page: 0, x: 158, y: 99, size: 8, maxW: 80 },
-      { key: "duracion_mantenimiento", page: 2, x: 238, y: 335, size: 8, maxW: 150 },
-      { key: "firma_nombre", page: 2, x: 150, y: 197, size: 8, maxW: 115 },
-      { key: "firma_cargo", page: 2, x: 110, y: 185, size: 8, maxW: 150 },
-      { key: "firma_telefono", page: 2, x: 125, y: 173, size: 8, maxW: 140 },
-      { key: "firma_email", page: 2, x: 110, y: 161, size: 8, maxW: 150 },
-      { key: "tecnico", page: 2, x: 390, y: 119.5, size: 8, maxW: 160 },
+      { key: "cliente", page: 0, x: 96.3, y: 629.5, size: 8, maxW: 260.2, c: 1 },
+      { key: "fecha", page: 0, x: 396.8, y: 629.5, size: 8, maxW: 82.4, date: true, c: 1 },
+      { key: "direccion", page: 0, x: 105, y: 611.8, size: 8, maxW: 207.8, c: 1 },
+      { key: "oficina", page: 0, x: 87.7, y: 594.2, size: 8, maxW: 92.1, c: 1 },
+      { key: "lugar", page: 0, x: 219, y: 594.2, size: 8, maxW: 93.8, c: 1 },
+      { key: "ciudad", page: 0, x: 378.8, y: 594.2, size: 8, maxW: 201.2, c: 1 },
+      { key: "marca", page: 0, x: 175.2, y: 576.5, size: 8, maxW: 129.3, c: 1 },
+      { key: "modelo", page: 0, x: 344.7, y: 576.5, size: 8, maxW: 90.8, c: 1 },
+      { key: "potencia", page: 0, x: 484.2, y: 576.5, size: 8, maxW: 95.8, c: 1 },
+      /* la plantilla trae una sola línea para serie/inventario */
+      { key: "serie", page: 0, x: 175.2, y: 558.9, size: 7, maxW: 137.6, c: 1, join: ["inventario"] },
+      { key: "bancos_baterias", page: 0, x: 122, y: 541.2, size: 7, maxW: 15.2, c: 1 },
+      { key: "baterias_cantidad", page: 0, x: 192.5, y: 541.2, size: 7, maxW: 23.5, c: 1 },
+      { key: "referencia_baterias", page: 0, x: 387.3, y: 541.2, size: 7, maxW: 67.4, c: 1 },
+      { key: "marca_baterias", page: 0, x: 491.8, y: 541.2, size: 7, maxW: 89.2, c: 1 },
+      { key: "voltaje_neutro_tierra", page: 0, x: 492, y: 247.7, size: 7, maxW: 41.5, c: 1 },
+      { key: "corriente_neutro", page: 0, x: 492, y: 230, size: 7, maxW: 41.5, c: 1 },
+      { key: "corriente_tierra", page: 0, x: 492, y: 212.4, size: 7, maxW: 41.5, c: 1 },
+      { key: "temperatura", page: 0, x: 380, y: 150.1, size: 8, maxW: 40, c: 1 },
+      { key: "voltaje_cargador", page: 0, x: 446.3, y: 167.7, size: 8, maxW: 115, c: 1 },
+      { key: "corriente_cargador", page: 0, x: 519, y: 139.1, size: 8, maxW: 54, c: 1 },
+      { key: "factor_potencia", page: 0, x: 146.8, y: 94.9, size: 8, maxW: 17, c: 1 },
+      { key: "duracion_mantenimiento", page: 2, x: 237.2, y: 331, size: 8, maxW: 75.6, c: 1 },
+      { key: "firma_nombre", page: 2, x: 140.2, y: 199, size: 8, maxW: 109.8, c: 1 },
+      { key: "firma_cargo", page: 2, x: 96.3, y: 187, size: 8, maxW: 153.7, c: 1 },
+      { key: "firma_telefono", page: 2, x: 114.5, y: 175, size: 8, maxW: 135.5, c: 1 },
+      { key: "firma_email", page: 2, x: 96.3, y: 163, size: 8, maxW: 153.7, c: 1 },
+      { key: "tecnico", page: 2, x: 396.8, y: 121, size: 8, maxW: 152.9, c: 1 },
     ],
     triple: [
-      { key: "corrientes_entrada", page: 0, x: 340, ys: [292, 280.5, 269], maxW: 38, size: 7 },
-      { key: "corrientes_salida", page: 0, x: 340, ys: [238.5, 227, 215.5], maxW: 38, size: 7 },
-      { key: "frecuencia", page: 0, x: 332, ys: [168, 154], maxW: 30, size: 8 },
-      { key: "potencia_utilizada", page: 0, x: 210, ys: [124, 112], maxW: 55, size: 8 },
+      { key: "corrientes_entrada", page: 0, x: 335.2, ys: [294.8, 283, 271.2], maxW: 39.6, size: 7, c: 1 },
+      { key: "corrientes_salida", page: 0, x: 335.2, ys: [236, 224.2, 212.5], maxW: 39.6, size: 7, c: 1 },
+      { key: "frecuencia", page: 0, x: 314, ys: [161.9, 150.1], maxW: 45, size: 8, c: 1 },
+      { key: "potencia_utilizada", page: 0, x: 186, ys: [121, 112.2], maxW: 54, size: 8, c: 1 },
+    ],
+    /* VAB/VBC/VCA y VAN/VBN/VCN de cada bloque de voltajes */
+    slots: [
+      { key: "voltaje_entrada", page: 0, size: 6.5, at: [
+        [148.8, 294.8, 31], [148.8, 283, 31], [148.8, 271.2, 31],
+        [219, 294.8, 31], [219, 283, 31], [219, 271.2, 31]] },
+      { key: "voltaje_salida", page: 0, size: 6.5, at: [
+        [148.8, 236, 31], [148.8, 224.2, 31], [148.8, 212.5, 31],
+        [219, 236, 31], [219, 224.2, 31], [219, 212.5, 31]] },
+      { key: "voltaje_bypass", page: 0, size: 6.5, at: [
+        [148.8, 171.3, 31], [148.8, 159.5, 31], [148.8, 147.8, 31],
+        [219, 171.3, 31], [219, 159.5, 31], [219, 147.8, 31]] },
     ],
     wrap: [
-      { key: "procedimiento", page: 0, x: 82, y0: 456.5, lh: 16.7, maxW: 460, size: 9, maxLines: 7 },
-      { key: "diagnostico", page: 2, x: 82, y0: 290, lh: 16.7, maxW: 470, size: 9, maxLines: 5 },
+      { key: "procedimiento", page: 0, x: 52, y0: 461.8, lh: 17.75, maxW: 528, size: 9, maxLines: 7 },
+      { key: "diagnostico", page: 2, x: 52, y0: 293.2, lh: 16.55, maxW: 508, size: 9, maxLines: 5 },
     ],
     marks: [
-      { key: "tipo_servicio", page: 0, map: {
-        "A - Diagnóstico": [[388, 710]],
-        "B - Mantenimiento preventivo": [[388, 698]],
-        "C - Mantenimiento correctivo": [[388, 686.5]],
-        "D - Instalación": [[388, 675]],
-      }},
-      { key: "tipo_servicio2", src: "tipo_servicio", page: 2, map: {
-        "A - Diagnóstico": [[388, 730]],
-        "B - Mantenimiento preventivo": [[388, 718.5]],
-        "C - Mantenimiento correctivo": [[388, 707]],
-        "D - Instalación": [[388, 695.5]],
-      }},
-      { key: "estado_equipo_inicio", page: 0, map: {
-        "Energizado": [[249, 500]], "Desenergizado": [[362, 500]],
-      }},
-      { key: "condicion", page: 0, map: {
-        "Garantía": [[417, 500]], "Contrato": [[471, 500]], "Orden de trabajo": [[580, 500]],
-      }},
-      { key: "voltajes_medidos", page: 0, map: {
-        "Muy altos": [[578.5, 290]], "Aceptables": [[578.5, 278.5]], "Muy bajos": [[578.5, 267]],
-      }},
-      { key: "baterias_libres_mant", page: 0, map: {
-        [SI]: [[421, 111]], [NO]: [[446, 111]],
-      }},
-      { key: "baterias_ubicacion", page: 0, map: {
-        "Externas": [[282, 546], [394, 89]],
-        "Internas": [[320, 546], [452, 89]],
-        "Internas y externas": [[282, 546], [320, 546], [394, 89], [452, 89]],
-      }},
+      { key: "tipo_servicio", page: 0, map: { "A - Diagnóstico": [[389.8, 716.2]], "B - Mantenimiento preventivo": [[389.8, 704.4]], "C - Mantenimiento correctivo": [[389.8, 692.5]], "D - Instalación": [[389.8, 680.9]] } },
+      { key: "tipo_servicio2", src: "tipo_servicio", page: 2, map: { "A - Diagnóstico": [[389.8, 735.5]], "B - Mantenimiento preventivo": [[389.8, 723.9]], "C - Mantenimiento correctivo": [[389.8, 712]], "D - Instalación": [[389.8, 700.3]] } },
+      { key: "estado_equipo_inicio", page: 0, map: { Energizado: [[247.4, 504.5]], Desenergizado: [[337.3, 504.5]] } },
+      { key: "condicion", page: 0, map: { "Garantía": [[398.6, 504.5]], Contrato: [[468.7, 504.5]], "Orden de trabajo": [[578.3, 504.5]] } },
+      { key: "voltajes_medidos", page: 0, map: { "Muy altos": [[578.3, 290.3]], Aceptables: [[578.3, 278.6]], "Muy bajos": [[578.3, 266.8]] } },
+      { key: "baterias_libres_mant", page: 0, map: { "Sí": [[424.9, 111]], No: [[451.2, 111]] } },
+      { key: "baterias_ubicacion", page: 0, map: { Externas: [[282.5, 545.5], [398.6, 93.4]], Internas: [[319.8, 545.5], [451.2, 93.4]], "Internas y externas": [[282.5, 545.5], [319.8, 545.5], [398.6, 93.4], [451.2, 93.4]] } },
     ],
     grid: [
-      { key: "chk_baterias", page: 0,
-        rows: { reposicion_electrolitico: 119.5, gravedad_especifica: 106.5, voltaje_cada_bateria: 93.5 },
-        opts: { [SI]: 574 }, onlyYes: true },
-      { key: "chk_final", page: 0,
-        rows: { equipo_en_linea: 111 },
-        opts: { [SI]: 306, [NO]: 340 } },
-      { key: "chk_final_fs", src: "chk_final", page: 0,
-        rows: { fuera_servicio: 89 },
-        opts: { [SI]: 341 }, onlyYes: true },
-      { key: "chk_inspeccion", page: 2,
-        rows: { luces_displays: 627, extractores: 615, filtros_aire: 603.5, breakers: 591.5, ventilacion_cuarto: 579.5, aseo_cuarto: 567.5 },
-        opts: { [B]: 174, [M]: 201, [R]: 243, [NA]: 272, [NAC]: 296, [NP]: 327 } },
-      { key: "chk_riesgos", page: 2,
-        rows: { material_metalico: 556, derrame_liquidos: 543.5, papeles_cuarto: 531, combustible_cuarto: 519, cuarto_deposito: 506 },
-        opts: { [SI]: 303, [NO]: 332 } },
-      { key: "chk_revision", page: 2,
-        rows: { limpieza_equipo: 454.5, limpieza_baterias: 442.5, soplado_interno: 430.5, sonido_inversor: 418.5, sonido_ventiladores: 407 },
-        opts: { [SI]: 255, [NO]: 282 } },
-      { key: "chk_revision_der", src: "chk_revision", page: 2,
-        rows: { revision_conectores: 454.5, retorqueo: 442.5, revision_tarjeteria: 430.5, sonidos_extranos: 418.5, cableado_bueno: 407 },
-        opts: { [SI]: 520, [NO]: 547 } },
-      { key: "chk_final_p3", src: "chk_final", page: 2,
-        rows: { reparado: 360, equipo_en_linea: 347 },
-        opts: { [SI]: 166, [NO]: 185 } },
-      { key: "chk_final_p3b", src: "chk_final", page: 2,
-        rows: { funcionando: 360, fuera_servicio: 347 },
-        opts: { [SI]: 354, [NO]: 372 } },
-      { key: "chk_final_p3c", src: "chk_final", page: 2,
-        rows: { se_puede_reparar: 360 },
-        opts: { [SI]: 516, [NO]: 545 } },
+      { key: "chk_baterias", page: 0, rows: { reposicion_electrolitico: 122.7, gravedad_especifica: 111, voltaje_cada_bateria: 99.2 }, opts: { "Sí": 578.3 }, onlyYes: true },
+      { key: "chk_final", page: 0, rows: { equipo_en_linea: 111 }, opts: { "Sí": 311, No: 346.1 } },
+      { key: "chk_final_fs", src: "chk_final", page: 0, rows: { fuera_servicio: 93.4 }, opts: { "Sí": 337.3 }, onlyYes: true },
+      { key: "chk_inspeccion", page: 2, rows: { luces_displays: 632.5, extractores: 620.5, filtros_aire: 608.5, breakers: 596.5, ventilacion_cuarto: 584.5, aseo_cuarto: 572.5 }, opts: { Bien: 177.3, Mal: 203.6, Regular: 247.4, "N/A": 273.7, NAC: 300, NP: 328.5 } },
+      { key: "chk_riesgos", page: 2, rows: { material_metalico: 560.5, derrame_liquidos: 548.5, papeles_cuarto: 536.5, combustible_cuarto: 524.5, cuarto_deposito: 512.5 }, opts: { "Sí": 300, No: 328.5 } },
+      { key: "chk_revision", page: 2, rows: { limpieza_equipo: 458.5, limpieza_baterias: 446.5, soplado_interno: 434.5, sonido_inversor: 422.5, sonido_ventiladores: 410.5 }, opts: { "Sí": 256.2, No: 291.3 } },
+      { key: "chk_revision_der", src: "chk_revision", page: 2, rows: { revision_conectores: 458.5, retorqueo: 446.5, revision_tarjeteria: 434.5, sonidos_extranos: 422.5, cableado_bueno: 410.5 }, opts: { "Sí": 521.3, No: 556.3 } },
+      { key: "chk_final_p3", src: "chk_final", page: 2, rows: { reparado: 365.5, equipo_en_linea: 353.5 }, opts: { "Sí": 168.6, No: 194.8 } },
+      { key: "chk_final_p3b", src: "chk_final", page: 2, rows: { funcionando: 365.5, fuera_servicio: 353.5 }, opts: { "Sí": 354.8, No: 381.1 } },
+      { key: "chk_final_p3c", src: "chk_final", page: 2, rows: { se_puede_reparar: 365.5 }, opts: { "Sí": 521.3, No: 547.5 } },
     ],
-    baterias: { page: 1, xBanks: [110, 242, 374, 506], yTop: 581, step: 11.79, max: 40, size: 7,
-      numero: { x: 440, y: 676, size: 10 }, bancoNoX: [70, 202, 334, 466], bancoNoY: 610 },
+    baterias: { page: 1, xBanks: [98.8, 232, 365.2, 501.4], colW: 70.5, yTop: 582.1, step: 11.759, max: 40, size: 7, numero: { x: 428, y: 672, size: 7.5, maxW: 78, c: 1 }, bancoNoX: [71, 204, 337, 470], bancoNoY: 613 },
     sigs: [
       { key: "firma", page: 2, x: 110, y: 125, h: 28, maxW: 130 },
       { key: "firma_tecnico", page: 2, x: 430, y: 141, h: 26, maxW: 120 },
     ],
   },
 
-  /* ============ MANTENIMIENTO PLANTAS ELÉCTRICAS (carta, 2 pág) ============ */
+  /* ===== MANTENIMIENTO PLANTAS ELÉCTRICAS (carta, 2 pág) ===== */
   plantas: {
     file: "FORMATO MANTENIMIENTO PLANTAS ELCTRICAS.pdf",
-    numero: [{ page: 0, x: 485, y: 685, size: 10 }, { page: 1, x: 490, y: 672, size: 10 }],
+    numero: [
+      { page: 0, x: 474, y: 687.9, size: 7.5, maxW: 74.5, c: 1 },
+      { page: 1, x: 474, y: 674.5, size: 7.5, maxW: 74.5, c: 1 },
+    ],
     text: [
-      { key: "fecha", page: 0, x: 105, y: 662, size: 8, maxW: 170, date: true },
-      { key: "cliente", page: 0, x: 340, y: 662, size: 8, maxW: 210 },
-      { key: "direccion", page: 0, x: 125, y: 651.5, size: 8, maxW: 200 },
-      { key: "oficina", page: 0, x: 455, y: 651.5, size: 8, maxW: 100 },
-      { key: "lugar", page: 0, x: 105, y: 637.5, size: 8, maxW: 190 },
-      { key: "ciudad", page: 0, x: 340, y: 637.5, size: 8, maxW: 140 },
-      { key: "motor_marca", page: 0, x: 140, y: 624.5, size: 8, maxW: 100 },
-      { key: "motor_modelo", page: 0, x: 250, y: 624.5, size: 8, maxW: 85 },
-      { key: "motor_potencia", page: 0, x: 348, y: 624.5, size: 8, maxW: 55 },
-      { key: "gen_marca", page: 0, x: 155, y: 611.5, size: 8, maxW: 90 },
-      { key: "gen_modelo", page: 0, x: 250, y: 611.5, size: 8, maxW: 85 },
-      { key: "gen_potencia", page: 0, x: 348, y: 611.5, size: 8, maxW: 55 },
-      { key: "baterias_ref", page: 0, x: 185, y: 598.5, size: 8, maxW: 110 },
-      { key: "serie", page: 0, x: 300, y: 598.5, size: 8, maxW: 55 },
-      { key: "inventario", page: 0, x: 358, y: 598.5, size: 8, maxW: 95 },
-      { key: "voltaje_salida", page: 0, x: 140, y: 530, size: 7, maxW: 130 },
-      { key: "breaker", page: 0, x: 462, y: 531, size: 7, maxW: 35 },
-      { key: "voltaje_baterias", page: 0, x: 150, y: 447, size: 8, maxW: 35 },
-      { key: "horometro", page: 1, x: 430, y: 426, size: 8, maxW: 125 },
-      { key: "firma_nombre", page: 1, x: 150, y: 191, size: 8, maxW: 130 },
-      { key: "firma_cargo", page: 1, x: 110, y: 178, size: 8, maxW: 160 },
-      { key: "firma_telefono", page: 1, x: 125, y: 165, size: 8, maxW: 150 },
-      { key: "firma_email", page: 1, x: 110, y: 152, size: 8, maxW: 160 },
-      { key: "tecnico", page: 1, x: 365, y: 96, size: 8, maxW: 150 },
+      { key: "fecha", page: 0, x: 91.7, y: 660.8, size: 8, maxW: 192, date: true, c: 1 },
+      { key: "cliente", page: 0, x: 348.2, y: 660.8, size: 8, maxW: 199.8, c: 1 },
+      { key: "direccion", page: 0, x: 101, y: 649.2, size: 8, maxW: 182.7, c: 1 },
+      { key: "oficina", page: 0, x: 449.7, y: 649.2, size: 8, maxW: 98.3, c: 1 },
+      { key: "lugar", page: 0, x: 91.7, y: 637.7, size: 8, maxW: 192, c: 1 },
+      { key: "ciudad", page: 0, x: 338.8, y: 637.7, size: 8, maxW: 209.2, c: 1 },
+      { key: "motor_marca", page: 0, x: 117.3, y: 626.2, size: 8, maxW: 72.7, c: 1 },
+      { key: "motor_modelo", page: 0, x: 228.2, y: 626.2, size: 8, maxW: 72.6, c: 1 },
+      { key: "motor_potencia", page: 0, x: 348.2, y: 626.2, size: 8, maxW: 54.1, c: 1 },
+      { key: "gen_marca", page: 0, x: 134.3, y: 614.7, size: 8, maxW: 72.7, c: 1 },
+      { key: "gen_modelo", page: 0, x: 245.2, y: 614.7, size: 8, maxW: 55.6, c: 1 },
+      { key: "gen_potencia", page: 0, x: 356, y: 614.7, size: 8, maxW: 38.5, c: 1 },
+      { key: "baterias_ref", page: 0, x: 167.5, y: 603.2, size: 8, maxW: 70, c: 1 },
+      { key: "serie", page: 0, x: 284, y: 603.2, size: 7, maxW: 27, c: 1 },
+      { key: "inventario", page: 0, x: 351, y: 603.2, size: 7, maxW: 116, c: 1 },
+      { key: "breaker", page: 0, x: 457.2, y: 528.5, size: 7, maxW: 32.1, c: 1 },
+      { key: "voltaje_baterias", page: 0, x: 141, y: 444.3, size: 8, maxW: 34, c: 1 },
+      { key: "horometro", page: 1, x: 448, y: 425.7, size: 8, maxW: 106, c: 1 },
+      { key: "firma_nombre", page: 1, x: 142.8, y: 188.7, size: 8, maxW: 140.9, c: 1 },
+      { key: "firma_cargo", page: 1, x: 82, y: 178, size: 8, maxW: 200, c: 1 },
+      { key: "firma_telefono", page: 1, x: 95, y: 166.5, size: 8, maxW: 187, c: 1 },
+      { key: "firma_email", page: 1, x: 82, y: 154.9, size: 8, maxW: 200, c: 1 },
+      { key: "tecnico", page: 1, x: 304.5, y: 90.8, size: 8, maxW: 243.8, c: 1 },
     ],
     triple: [
-      { key: "corrientes_salida", page: 0, x: 278, ys: [529, 519, 509], maxW: 38, size: 7 },
-      { key: "frecuencia", page: 0, x: 378, ys: [524, 504], maxW: 30, size: 8 },
+      { key: "corrientes_salida", page: 0, x: 278.2, ys: [528.5, 516.9, 505.4], maxW: 40.6, size: 7, c: 1 },
+      { key: "frecuencia", page: 0, x: 380, ys: [522.7, 505.4], maxW: 33, size: 8, c: 1 },
+    ],
+    /* VAB/VBC/VCA y VAN/VBN/VCN del generador */
+    slots: [
+      { key: "voltaje_salida", page: 0, size: 6.5, at: [
+        [150.3, 540, 23.4], [150.3, 522.7, 23.4], [150.3, 505.4, 23.4],
+        [218.7, 540, 23.5], [218.7, 522.7, 23.5], [218.7, 505.4, 23.5]] },
     ],
     wrap: [
-      { key: "trabajo_realizado", page: 1, x: 80, y0: 362, lh: 13, maxW: 470, size: 9, maxLines: 6 },
-      { key: "observaciones", page: 1, x: 80, y0: 264, lh: 13, maxW: 470, size: 9, maxLines: 5 },
+      { key: "trabajo_realizado", page: 1, x: 50, y0: 371, lh: 13, maxW: 496, size: 9, maxLines: 5 },
+      { key: "observaciones", page: 1, x: 50, y0: 273, lh: 13, maxW: 496, size: 9, maxLines: 5 },
     ],
     marks: [
-      { key: "combustible", page: 0, map: {
-        "Gasolina": [[455, 622]], "Diesel": [[515, 622]], "Gas": [[580, 622]],
-      }},
-      { key: "condicion", page: 0, map: {
-        "Garantía": [[100, 586]], "Contrato": [[160, 586]], "Orden de trabajo": [[258, 586]], "Solicitud escrita o telefónica": [[390, 586]],
-      }},
-      { key: "estado_equipo_inicio", page: 0, map: {
-        "Energizado": [[470, 586]], "Desenergizado": [[556, 586]],
-      }},
-      { key: "precalentador", page: 0, map: { [SI]: [[527, 517]], [NO]: [[527, 504]] } },
-      { key: "cargador_externo", page: 0, map: {
-        "Bueno": [[350, 466]], "Malo": [[350, 454]],
-      }},
-      { key: "medidores", page: 0, map: {
-        "Buenos": [[402, 466], [447, 466]], "Malos": [[402, 454], [447, 454]], "No tiene": [[402, 442], [447, 442]],
-      }},
-      { key: "funcionamiento_previo", page: 1, map: {
-        "Correcto": [[222, 402]], "Incorrecto": [[302, 402]], "No saben": [[373, 402]],
-      }},
+      { key: "combustible", page: 0, map: { Gasolina: [[453.8, 629.4]], Diesel: [[507.7, 629.4]], Gas: [[542, 629.4]] } },
+      { key: "condicion", page: 0, map: { "Garantía": [[101, 594.8]], Contrato: [[161.8, 594.8]], "Orden de trabajo": [[254.4, 594.8]], "Solicitud escrita o telefónica": [[389.5, 594.8]] } },
+      { key: "estado_equipo_inicio", page: 0, map: { Energizado: [[458.3, 594.8]], Desenergizado: [[529, 594.8]] } },
+      { key: "precalentador", page: 0, map: { "Sí": [[528.9, 519.9]], No: [[530.3, 508.4]] } },
+      { key: "cargador_externo", page: 0, map: { Bueno: [[348, 462.3]], Malo: [[345, 450.8]] } },
+      { key: "medidores", page: 0, map: { Buenos: [[399, 468.1], [450.5, 468.1]], Malos: [[395, 456.5], [446.5, 456.5]], "No tiene": [[401, 445], [452, 445]] } },
+      { key: "funcionamiento_previo", page: 1, map: { Correcto: [[216.5, 405.1]], Incorrecto: [[298.5, 405.1]], "No saben": [[369.7, 405.1]] } },
     ],
     grid: [
-      { key: "chk_motor", page: 0,
-        rows: { presion_aceite: 400, filtro_aceite: 388.3, temperatura: 376.6, nivel_lubricante: 364.9, tension_correas: 353.2, nivel_combustible: 341.5, nivel_refrigerante: 329.8, drenaje_prefiltros: 318.1, motor_arranque: 289, alternador: 282 },
-        opts: { [B]: 190, [M]: 218, [R]: 262, [NA]: 299, [NAC]: 324, [NP]: 356 } },
-      { key: "chk_fugas", page: 0,
-        rows: { fugas_aceite: 303.5, fugas_combustible: 296 },
-        opts: { [SI]: 143, [NO]: 163 } },
-      { key: "chk_sistema", page: 0,
-        rows: { luces_displays: 240, extractores: 228.4, filtros_aire: 216.8, breakers: 205.2, ventilacion: 193.6, aseo: 182, protecciones: 170.4, cableado_senal: 158.8, cableado_potencia: 147.2 },
-        opts: { [B]: 190, [M]: 218, [R]: 262, [NA]: 299, [NAC]: 324, [NP]: 356 } },
-      { key: "chk_sitio", page: 0,
-        rows: { material_metalico: 135.6, liquidos_derramados: 124, papeles_sitio: 112.4, combustible_ok: 100.8, sitio_deposito: 89.2 },
-        opts: { [SI]: 471, [NO]: 514 } },
-      { key: "chk_limpieza", page: 1,
-        rows: { limpieza_equipo: 630.5, limpieza_baterias: 617.5, sonido_ventiladores: 604.5, sonido_motor: 591.5, sonido_arranque: 579 },
-        opts: { [SI]: 248, [NO]: 284 } },
-      { key: "chk_limpieza_der", src: "chk_limpieza", page: 1,
-        rows: { revision_conectores: 630.5, retorqueo: 617.5, revision_tarjeteria: 604.5 },
-        opts: { [SI]: 503, [NO]: 539 } },
-      { key: "chk_tablero", page: 1,
-        rows: { totalizador: 540.5, breaker_distribucion: 527.5 },
-        opts: { [SI]: 248, [NO]: 284 } },
+      { key: "chk_motor", page: 0, rows: { presion_aceite: 404.7, filtro_aceite: 393.2, temperatura: 381.7, nivel_lubricante: 370.1, tension_correas: 358.6, nivel_combustible: 347.1, nivel_refrigerante: 335.6, drenaje_prefiltros: 324, motor_arranque: 289.5, alternador: 278 }, opts: { Bien: 188.5, Mal: 221.7, Regular: 268.6, "N/A": 294.3, NAC: 323.8, NP: 354.3 } },
+      { key: "chk_fugas", page: 0, rows: { fugas_aceite: 312.5, fugas_combustible: 301 }, opts: { "Sí": 131.1, No: 156 } },
+      { key: "chk_sistema", page: 0, rows: { luces_displays: 243.4, extractores: 231.9, filtros_aire: 220.3, breakers: 208.8, ventilacion: 197.3, aseo: 185.8, protecciones: 174.3, cableado_senal: 162.7, cableado_potencia: 151.2 }, opts: { Bien: 188.5, Mal: 221.7, Regular: 268.6, "N/A": 294.3, NAC: 323.8, NP: 354.3 } },
+      { key: "chk_sitio", page: 0, rows: { material_metalico: 139.7, liquidos_derramados: 128.2, papeles_sitio: 116.7, combustible_ok: 105.1, sitio_deposito: 93.6 }, opts: { "Sí": 322.9, No: 352 } },
+      { key: "chk_limpieza", page: 1, rows: { limpieza_equipo: 629.7, limpieza_baterias: 618.2, sonido_ventiladores: 606.7, sonido_motor: 595.2, sonido_arranque: 583.7 }, opts: { "Sí": 251.1, No: 288.1 } },
+      { key: "chk_limpieza_der", src: "chk_limpieza", page: 1, rows: { revision_conectores: 629.7, retorqueo: 618.2, revision_tarjeteria: 606.7 }, opts: { "Sí": 506.7, No: 543.7 } },
+      { key: "chk_tablero", page: 1, rows: { totalizador: 543.3, breaker_distribucion: 531.8 }, opts: { "Sí": 251.1, No: 288.1 } },
     ],
-    pruebas: { page: 1,
-      arranque_planta: { y: 464.5, si: 172, no: 207, bien: 254, mal: 292 },
-      transferencia_manual: { y: 453, si: 172, no: 207, bien: 254, mal: 292 },
-      transferencia_automatica: { y: 464.5, si: 424, no: 456, bien: 492, mal: 537 },
-    },
-    bateriasChk: { page: 0,
-      libres: { si: [120, 463], no: [160, 463] },
-      simple: {
-        reposicion_electrolitico: [296, 493], gravedad_especifica: [296, 481],
-        voltaje_cada_bateria: [296, 469], bornes_buenos: [296, 457], bornes_sulfatados: [296, 445],
-      } },
+    pruebas: { page: 1, arranque_planta: { y: 468.4, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_manual: { y: 456.9, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_automatica: { y: 468.4, si: 427, no: 464.5, bien: 503, mal: 544 } },
+    bateriasChk: { page: 0, libres: { si: [121, 462.3], no: [166, 462.3] }, simple: { reposicion_electrolitico: [296, 491.1], gravedad_especifica: [296, 479.6], voltaje_cada_bateria: [296, 468.1], bornes_buenos: [296, 458.6], bornes_sulfatados: [296, 447.1] } },
     sigs: [
       { key: "firma", page: 1, x: 110, y: 99, h: 26, maxW: 130 },
       { key: "firma_tecnico", page: 1, x: 380, y: 116, h: 24, maxW: 110 },
     ],
   },
 
-  /* ============ MANTENIMIENTO A.A (carta, 1 pág) ============ */
+  /* ===== MANTENIMIENTO A.A (carta, 1 pág) ===== */
   aire: {
     file: "REPORTE TECNICO - A.A - DISTRI.pdf",
-    numero: [{ page: 0, x: 440, y: 706, size: 9 }],
+    /* Esta plantilla es una tabla: cada dato va centrado en su celda. */
+    numero: [
+      { page: 0, x: 430.2, y: 706.1, size: 9, maxW: 152.7, c: 1 },
+    ],
     text: [
-      { key: "fecha", page: 0, x: 155, y: 706, size: 8, maxW: 100, date: true },
-      { key: "cliente", page: 0, x: 155, y: 692, size: 8, maxW: 380 },
-      { key: "ciudad", page: 0, x: 155, y: 680, size: 8, maxW: 180 },
-      { key: "sucursal", page: 0, x: 398, y: 680, size: 8, maxW: 150 },
-      { key: "direccion", page: 0, x: 155, y: 668, size: 8, maxW: 180 },
-      { key: "telefono", page: 0, x: 403, y: 668, size: 8, maxW: 145 },
-      { key: "contacto", page: 0, x: 155, y: 656, size: 8, maxW: 180 },
-      { key: "area", page: 0, x: 402, y: 656, size: 8, maxW: 145 },
-      { key: "marca", page: 0, x: 152, y: 641, size: 8, maxW: 140 },
-      { key: "capacidad", page: 0, x: 152, y: 624, size: 8, maxW: 115 },
-      { key: "ubicacion_manejadora", page: 0, x: 172, y: 602, size: 7, maxW: 72 },
-      { key: "ubicacion_condensadora", page: 0, x: 172, y: 582, size: 7, maxW: 72 },
-      { key: "manejadora_modelo", page: 0, x: 168, y: 563, size: 8, maxW: 175 },
-      { key: "manejadora_serie", page: 0, x: 168, y: 549, size: 8, maxW: 175 },
-      { key: "condensadora_modelo", page: 0, x: 168, y: 535, size: 8, maxW: 175 },
-      { key: "condensadora_serie", page: 0, x: 168, y: 520, size: 8, maxW: 175 },
-      { key: "hora_inicio", page: 0, x: 170, y: 492, size: 8, maxW: 160 },
-      { key: "hora_fin", page: 0, x: 465, y: 492, size: 8, maxW: 115 },
-      { key: "tecnico", page: 0, x: 152, y: 136, size: 8, maxW: 170 },
-      { key: "cc_tecnico", page: 0, x: 152, y: 98, size: 8, maxW: 170 },
-      { key: "firma_nombre", page: 0, x: 410, y: 136, size: 8, maxW: 170 },
-      { key: "cc_cliente", page: 0, x: 410, y: 98, size: 8, maxW: 170 },
+      { key: "fecha", page: 0, x: 148.2, y: 706.1, size: 8, maxW: 179.5, date: true, c: 1 },
+      { key: "cliente", page: 0, x: 148.2, y: 693.4, size: 8, maxW: 434.7, c: 1 },
+      { key: "ciudad", page: 0, x: 148.2, y: 680.6, size: 8, maxW: 179.5, c: 1 },
+      { key: "sucursal", page: 0, x: 430.2, y: 680.6, size: 8, maxW: 152.7, c: 1 },
+      { key: "direccion", page: 0, x: 148.2, y: 667.9, size: 8, maxW: 179.5, c: 1 },
+      { key: "telefono", page: 0, x: 430.2, y: 667.9, size: 8, maxW: 152.7, c: 1 },
+      { key: "contacto", page: 0, x: 148.2, y: 655.6, size: 8, maxW: 179.5, c: 1 },
+      { key: "area", page: 0, x: 430.2, y: 655.6, size: 8, maxW: 152.7, c: 1 },
+      { key: "marca", page: 0, x: 168.2, y: 642.6, size: 8, maxW: 159.5, c: 1 },
+      { key: "capacidad", page: 0, x: 168.2, y: 625.7, size: 8, maxW: 98.9, c: 1 },
+      { key: "ubicacion_manejadora", page: 0, x: 168.2, y: 603.3, size: 8, maxW: 159.5, c: 1 },
+      { key: "ubicacion_condensadora", page: 0, x: 168.2, y: 581.9, size: 8, maxW: 159.5, c: 1 },
+      { key: "manejadora_modelo", page: 0, x: 168.2, y: 564.1, size: 8, maxW: 159.5, c: 1 },
+      { key: "manejadora_serie", page: 0, x: 168.2, y: 549.8, size: 8, maxW: 159.5, c: 1 },
+      { key: "condensadora_modelo", page: 0, x: 168.2, y: 535.5, size: 8, maxW: 159.5, c: 1 },
+      { key: "condensadora_serie", page: 0, x: 168.2, y: 521.2, size: 8, maxW: 159.5, c: 1 },
+      { key: "hora_inicio", page: 0, x: 168.2, y: 492.4, size: 8, maxW: 159.5, c: 1 },
+      { key: "hora_fin", page: 0, x: 464.3, y: 492.4, size: 8, maxW: 118.6, c: 1 },
+      { key: "tecnico", page: 0, x: 148.2, y: 135.2, size: 8, maxW: 179.5, c: 1 },
+      { key: "cc_tecnico", page: 0, x: 148.2, y: 97.2, size: 8, maxW: 179.5, c: 1 },
+      { key: "firma_nombre", page: 0, x: 430.2, y: 135.2, size: 8, maxW: 152.7, c: 1 },
+      { key: "cc_cliente", page: 0, x: 430.2, y: 97.2, size: 8, maxW: 152.7, c: 1 },
     ],
     wrap: [
-      { key: "informe", page: 0, x: 52, y0: 455, lh: 11, maxW: 268, size: 8, maxLines: 26 },
-      { key: "observaciones", page: 0, x: 336, y0: 270, lh: 11, maxW: 245, size: 8, maxLines: 6 },
-      { key: "pendientes", page: 0, x: 336, y0: 200, lh: 11, maxW: 245, size: 8, maxLines: 5 },
+      { key: "informe", page: 0, x: 54, y0: 455, lh: 11, maxW: 272, size: 8, maxLines: 26 },
+      { key: "observaciones", page: 0, x: 332, y0: 273, lh: 11, maxW: 250, size: 8, maxLines: 5 },
+      { key: "pendientes", page: 0, x: 332, y0: 200.7, lh: 11, maxW: 250, size: 8, maxLines: 4 },
     ],
     marks: [
-      { key: "trabajo", page: 0, map: {
-        "Garantía": [[463, 640]],
-        "Mantenimiento preventivo": [[463, 623]],
-        "Mantenimiento correctivo": [[463, 601]],
-        "Instalación": [[463, 580]],
-      }},
-      { key: "tipo_servicio", page: 0, map: {
-        "Laboratorio": [[569, 631]], "Visita": [[569, 588]],
-      }},
-      { key: "tipo_equipo", page: 0, map: {
-        "Mini Split": [[463, 562]], "Piso Techo": [[463, 548]], "Cassete": [[463, 533]], "Paquete": [[463, 519]],
-        "Ventana": [[569, 562]], "Split Central": [[569, 548]], "Portátil": [[569, 533]], "Precisión": [[569, 519]],
-      }},
+      { key: "trabajo", page: 0, map: { "Garantía": [[470.1, 645.5]], "Mantenimiento preventivo": [[470.1, 627.6]], "Mantenimiento correctivo": [[470.1, 606.2]], "Instalación": [[470.1, 584.9]] } },
+      { key: "tipo_servicio", page: 0, map: { Laboratorio: [[576, 634.7]], Visita: [[576, 595.5]] } },
+      { key: "tipo_equipo", page: 0, map: { "Mini Split": [[470.3, 567.4]], "Piso Techo": [[470.3, 553.1]], Cassete: [[470.3, 538.8]], Paquete: [[470.3, 524.4]], Ventana: [[576, 567.4]], "Split Central": [[576, 553.1]], "Portátil": [[576, 538.8]], "Precisión": [[576, 524.4]] } },
     ],
     grid: [
-      { key: "chk_verificacion", page: 0,
-        rows: { funcionamiento: 448.5, carga_refrigerante: 428, serpentin_condensador: 407.5, serpentin_manejadora: 384.5, filtros_aire: 363, ventilador_condensador: 343, ventilador_manejadora: 320, bomba_condensado: 300.5 },
-        opts: { "Bueno": 425, "Regular": 444, "Malo": 461 } },
-      { key: "chk_verificacion_der", src: "chk_verificacion", page: 0,
-        rows: { revision_escapes: 428, aislamiento: 407.5, soportes: 384.5, breakers: 343, contactores: 320, cableado: 300.5 },
-        opts: { "Bueno": 545, "Regular": 564, "Malo": 583 } },
+      { key: "chk_verificacion", page: 0, rows: { funcionamiento: 453.2, carga_refrigerante: 432, serpentin_condensador: 410.6, serpentin_manejadora: 389.2, filtros_aire: 367.8, ventilador_condensador: 346.4, ventilador_manejadora: 324.9, bomba_condensado: 303.6 }, opts: { Bueno: 420.4, Regular: 436.6, Malo: 453.8 } },
+      { key: "chk_verificacion_der", src: "chk_verificacion", page: 0, rows: { revision_escapes: 432, aislamiento: 410.6, soportes: 389.2, breakers: 346.4, contactores: 324.9, cableado: 303.6 }, opts: { Bueno: 538.4, Regular: 557.6, Malo: 576.2 } },
     ],
     sigs: [
-      { key: "firma_tecnico", page: 0, x: 165, y: 109, h: 19, maxW: 120 },
-      { key: "firma", page: 0, x: 420, y: 109, h: 19, maxW: 120 },
+      { key: "firma_tecnico", page: 0, cx: 238, y: 110, h: 17, maxW: 150 },
+      { key: "firma", page: 0, cx: 506.5, y: 110, h: 17, maxW: 130 },
     ],
   },
 
-  /* ============ REPORTE TÉCNICO CCTV (carta, 1 pág) ============ */
+  /* ===== REPORTE TÉCNICO CCTV (carta, 1 pág) ===== */
   cctv: {
     file: "REPORTE TECNICO CCTV.pdf",
     text: [
-      { key: "cliente", page: 0, x: 112, y: 608, size: 8, maxW: 225 },
-      { key: "fecha", page: 0, x: 112, y: 593, size: 8, maxW: 225, date: true },
-      { key: "direccion", page: 0, x: 125, y: 577, size: 8, maxW: 210 },
-      { key: "ciudad", page: 0, x: 112, y: 563, size: 8, maxW: 95 },
-      { key: "lugar", page: 0, x: 245, y: 563, size: 8, maxW: 90 },
-      { key: "equipo", page: 0, x: 112, y: 547, size: 8, maxW: 55 },
-      { key: "marca", page: 0, x: 190, y: 547, size: 8, maxW: 145 },
-      { key: "serie", page: 0, x: 112, y: 530, size: 8, maxW: 225 },
-      { key: "modelo", page: 0, x: 118, y: 513, size: 8, maxW: 220 },
-      { key: "firma_nombre", page: 0, x: 140, y: 209, size: 8, maxW: 110 },
-      { key: "firma_cargo", page: 0, x: 110, y: 196, size: 8, maxW: 140 },
-      { key: "firma_telefono", page: 0, x: 125, y: 185.5, size: 8, maxW: 130 },
-      { key: "firma_email", page: 0, x: 110, y: 173.5, size: 8, maxW: 140 },
-      { key: "tecnico", page: 0, x: 390, y: 131, size: 8, maxW: 155 },
+      { key: "cliente", page: 0, x: 111.5, y: 608.9, size: 8, maxW: 213.5, c: 1 },
+      { key: "fecha", page: 0, x: 111.5, y: 592.1, size: 8, maxW: 213.5, date: true, c: 1 },
+      { key: "direccion", page: 0, x: 120, y: 578.5, size: 8, maxW: 205, c: 1 },
+      { key: "ciudad", page: 0, x: 103, y: 563.8, size: 8, maxW: 92.5, c: 1 },
+      { key: "lugar", page: 0, x: 234.2, y: 563.8, size: 8, maxW: 90.8, c: 1 },
+      { key: "equipo", page: 0, x: 103, y: 546.5, size: 8, maxW: 49.8, c: 1 },
+      { key: "marca", page: 0, x: 191, y: 546.5, size: 8, maxW: 134, c: 1 },
+      { key: "serie", page: 0, x: 103, y: 529.2, size: 8, maxW: 222, c: 1 },
+      { key: "modelo", page: 0, x: 111.5, y: 511.9, size: 8, maxW: 213.5, c: 1 },
+      { key: "firma_nombre", page: 0, x: 137, y: 208.4, size: 8, maxW: 109, c: 1 },
+      { key: "firma_cargo", page: 0, x: 94.7, y: 196.6, size: 8, maxW: 151.3, c: 1 },
+      { key: "firma_telefono", page: 0, x: 111.5, y: 184.9, size: 8, maxW: 134.5, c: 1 },
+      { key: "firma_email", page: 0, x: 94.7, y: 173.1, size: 8, maxW: 151.3, c: 1 },
+      { key: "tecnico", page: 0, x: 389.2, y: 132, size: 8, maxW: 153.6, c: 1 },
     ],
     wrap: [
-      { key: "detalles", page: 0, x: 340, y0: 441, lh: 11, maxW: 210, size: 8, maxLines: 5 },
-      { key: "diagnostico", page: 0, x: 80, y0: 290, lh: 11, maxW: 460, size: 8, maxLines: 6 },
+      { key: "detalles", page: 0, x: 334, y0: 452.5, lh: 11.55, maxW: 219, size: 8, maxLines: 5 },
+      { key: "diagnostico", page: 0, x: 49, y0: 300.4, lh: 16.3, maxW: 504, size: 8.5, maxLines: 5 },
     ],
     marks: [
-      { key: "tecnologia", page: 0, map: { "IP": [[475, 609]], "Análoga": [[514, 609]] } },
-      { key: "tipo_camara", page: 0, map: {
-        "Domo PTZ": [[467.5, 580]], "Fija bala": [[467.5, 564.5]], "Fija mini domo": [[467.5, 549]],
-        "Fija con housing": [[467.5, 526.5]], "Fija 360°": [[467.5, 514.5]],
-      }},
+      /* IP y ANL vienen rotulados dentro del recuadro: la X va al lado */
+      { key: "tecnologia", page: 0, map: { IP: [[496.5, 610.9]], "Análoga": [[526.5, 610.9]] } },
+      { key: "tipo_camara", page: 0, map: { "Domo PTZ": [[469.9, 583.6]], "Fija bala": [[469.8, 568.9]], "Fija mini domo": [[469.9, 552.6]], "Fija con housing": [[470.2, 535.4]], "Fija 360°": [[470.5, 518.1]] } },
     ],
     grid: [
-      { key: "chk_componentes", page: 0,
-        rows: { estado_fisico: 463, acrilico: 452, fuente_dc: 441, balums: 430, cableado: 419, voltaje_alimentacion: 408, dvr_nvr: 397 },
-        opts: { [B]: 175, [M]: 199, [R]: 242, [NA]: 272, [NAC]: 294, [NP]: 326 } },
-      { key: "chk_tareas", page: 0,
-        rows: { ajuste_conectores: 382, limpieza_equipo: 370, limpieza_lente: 358, camara_operativa: 345.5 },
-        opts: { [SI]: 172, [NO]: 199 } },
+      { key: "chk_componentes", page: 0, rows: { estado_fisico: 467, acrilico: 457.3, fuente_dc: 446.3, balums: 434.5, cableado: 422.8, voltaje_alimentacion: 411, dvr_nvr: 398.6 }, opts: { Bien: 176.1, Mal: 201.6, Regular: 244.2, "N/A": 269.7, NAC: 295.4, NP: 323.1 } },
+      { key: "chk_tareas", page: 0, rows: { ajuste_conectores: 386.3, limpieza_equipo: 374.5, limpieza_lente: 362.8, camara_operativa: 350.9 }, opts: { "Sí": 176.1, No: 201.6 } },
     ],
     sigs: [
       { key: "firma", page: 0, x: 110, y: 139, h: 28, maxW: 130 },
