@@ -4,6 +4,8 @@
    ============================================================ */
 (function () {
   const DEMO_KEYS = { users: "dec_users", cots: "dec_cotizaciones", session: "dec_session", seq: "dec_seq" };
+  const SIGNED_TTL = 3600;        // segundos que vive una URL firmada
+  const signedUrls = new Map();   // ruta → { url, expira }
   let sb = null;          // cliente supabase
   let currentProfile = null;
 
@@ -133,31 +135,45 @@
     },
 
     /* ---------- cotizaciones ---------- */
-    nextNumber(prefix) {
+    /* El número lo entrega el servidor (tabla consecutivos): así no se
+       puede repetir, cosa que el número aleatorio anterior sí permitía. */
+    async nextNumber(prefix) {
       if (this.isDemo) {
         const seq = lsGet(DEMO_KEYS.seq, {});
         seq[prefix] = (seq[prefix] || 0) + 1;
         lsSet(DEMO_KEYS.seq, seq);
         return `${prefix}-${String(seq[prefix]).padStart(4, "0")}`;
       }
-      // Producción: número legible basado en fecha + aleatorio (evita colisiones sin secuencia central)
-      const d = new Date();
-      const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      return `${prefix}-${ymd}-${Math.floor(100 + Math.random() * 900)}`;
+      const { data, error } = await sb.rpc("siguiente_numero", { p_prefijo: prefix });
+      if (error) throw new Error("No se pudo asignar el número del documento.");
+      return data;
     },
 
+    /* El historial solo necesita la cabecera de cada registro: pedir la
+       columna `data` completa traía las firmas en base64 de TODO el
+       histórico en cada carga. Se pagina para no toparse con el tope de
+       filas de la API. */
     async listCotizaciones() {
       if (this.isDemo) {
         const all = lsGet(DEMO_KEYS.cots, []);
         const mine = currentProfile.role === "jefe" ? all : all.filter((c) => c.user_id === currentProfile.id);
-        return mine.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        return mine
+          .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+          .map((c) => ({ ...c, cliente: c.data?.cliente || "" }));
       }
-      const { data, error } = await sb
-        .from("cotizaciones")
-        .select("id, numero, format_type, data, user_id, owner_name, created_at, updated_at")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const PAGE = 1000;
+      const rows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await sb
+          .from("cotizaciones")
+          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, cliente:data->>cliente")
+          .order("updated_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        rows.push(...data);
+        if (data.length < PAGE) break;
+      }
+      return rows;
     },
 
     async getCotizacion(id) {
@@ -212,22 +228,73 @@
         lsSet(DEMO_KEYS.cots, lsGet(DEMO_KEYS.cots, []).filter((c) => c.id !== id));
         return;
       }
+      // primero las imágenes: si no, quedan en el bucket para siempre
+      const rec = await this.getCotizacion(id).catch(() => null);
       const { error } = await sb.from("cotizaciones").delete().eq("id", id);
       if (error) throw error;
+      await this._deleteImages(rec);
     },
 
     /* ---------- imágenes ---------- */
     compressImage,
 
-    /* Recibe un dataURL ya comprimido y devuelve la URL final a guardar */
+    /* Guarda la RUTA dentro del bucket, no una URL: el bucket es privado
+       y cada vez que hay que mostrar la imagen se firma una URL temporal. */
     async uploadImage(dataURL) {
       if (this.isDemo) return dataURL; // en demo se guarda el dataURL directo
       const blob = dataURLtoBlob(dataURL);
       const path = `${currentProfile.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-      const { error } = await sb.storage.from(APP_CONFIG.STORAGE_BUCKET).upload(path, blob, { contentType: "image/jpeg" });
+      const { error } = await sb.storage
+        .from(APP_CONFIG.STORAGE_BUCKET)
+        .upload(path, blob, { contentType: "image/jpeg" });
       if (error) throw error;
-      const { data } = sb.storage.from(APP_CONFIG.STORAGE_BUCKET).getPublicUrl(path);
-      return data.publicUrl;
+      return path;
+    },
+
+    /* Ruta guardada → URL que el navegador puede abrir. Los dataURL y las
+       URLs completas (registros anteriores a la migración) pasan tal cual. */
+    async imageUrl(ref) {
+      if (!ref) return "";
+      const s = String(ref);
+      if (this.isDemo || s.startsWith("data:") || s.startsWith("blob:") || s.startsWith("http")) return s;
+      const hit = signedUrls.get(s);
+      if (hit && hit.expira > Date.now()) return hit.url;
+      const { data, error } = await sb.storage
+        .from(APP_CONFIG.STORAGE_BUCKET)
+        .createSignedUrl(s, SIGNED_TTL);
+      if (error) throw error;
+      signedUrls.set(s, { url: data.signedUrl, expira: Date.now() + (SIGNED_TTL - 300) * 1000 });
+      return data.signedUrl;
+    },
+
+    /* Copia del registro con las imágenes ya firmadas, lista para el PDF.
+       El registro original conserva las rutas, que es lo que se guarda. */
+    async hydrateImages(record) {
+      const data = { ...record.data };
+      for (const key of Object.keys(data)) {
+        if (!Array.isArray(data[key]) || !data[key].length) continue;
+        if (!data[key].every((v) => typeof v === "string")) continue;
+        data[key] = await Promise.all(data[key].map((v) => this.imageUrl(v)));
+      }
+      return { ...record, data };
+    },
+
+    /* Borra del bucket las imágenes de un registro (evita que el
+       almacenamiento crezca con archivos que ya nadie usa). */
+    async _deleteImages(record) {
+      if (this.isDemo || !record) return;
+      const rutas = [];
+      for (const val of Object.values(record.data || {})) {
+        if (!Array.isArray(val)) continue;
+        for (const v of val) {
+          if (typeof v === "string" && !v.startsWith("data:") && !v.startsWith("http") && v.includes("/")) {
+            rutas.push(v);
+          }
+        }
+      }
+      if (!rutas.length) return;
+      try { await sb.storage.from(APP_CONFIG.STORAGE_BUCKET).remove(rutas); }
+      catch (e) { console.warn("No se pudieron borrar las imágenes:", e); }
     },
 
     /* ---------- usuarios (solo jefe) ---------- */

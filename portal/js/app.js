@@ -353,7 +353,8 @@
         const t = document.createElement("div");
         t.className = "img-thumb";
         const img = document.createElement("img");
-        img.src = src;
+        // el valor guardado es una ruta del bucket privado: hay que firmarla
+        Store.imageUrl(src).then((u) => { img.src = u; }).catch(() => {});
         const del = document.createElement("button");
         del.type = "button";
         del.textContent = "×";
@@ -538,10 +539,10 @@
     if (!currentFormat) return;
     $("#preview-panel").classList.remove("hidden");
     try {
-      const record = {
+      const record = await Store.hydrateImages({
         numero: editingRecord ? editingRecord.numero : `${FORMATS[currentFormat].prefix}-BORRADOR`,
         data: collectData(),
-      };
+      });
       const url = await PDFGen.previewDataURL(currentFormat, record);
       $("#pdf-preview").src = url;
     } catch (e) { console.error("preview:", e); }
@@ -595,14 +596,14 @@
         record = await Store.updateCotizacion(editingRecord.id, data);
         editingRecord = record;
       } else {
-        const numero = Store.nextNumber(format.prefix);
+        const numero = await Store.nextNumber(format.prefix);
         record = await Store.createCotizacion({ numero, format_type: currentFormat, data });
         editingRecord = record;
         $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
       }
 
-      if (download) await PDFGen.download(currentFormat, record);
+      if (download) await PDFGen.download(currentFormat, await Store.hydrateImages(record));
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
       toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
@@ -641,7 +642,7 @@
     const rows = historialCache.filter((c) => {
       if (!q) return true;
       const fmt = FORMATS[c.format_type];
-      return [c.numero, c.data?.cliente, fmt?.name, c.owner_name]
+      return [c.numero, c.cliente, fmt?.name, c.owner_name]
         .some((s) => (s || "").toLowerCase().includes(q));
     });
 
@@ -658,7 +659,7 @@
       <div class="hist-card" data-id="${c.id}">
         <div class="hist-icon">${fmt.icon}</div>
         <div class="hist-info">
-          <strong>${escapeHtml(c.data?.cliente || "Sin cliente")}</strong>
+          <strong>${escapeHtml(c.cliente || "Sin cliente")}</strong>
           <small>${fmt.name} · ${fecha}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
         </div>
         <span class="hist-num">${escapeHtml(c.numero)}</span>
@@ -681,13 +682,15 @@
         e.target.disabled = true;
         try {
           const rec = await Store.getCotizacion(id);
-          await PDFGen.download(rec.format_type, rec);
+          await PDFGen.download(rec.format_type, await Store.hydrateImages(rec));
+        } catch (ex) {
+          toast(ex.message || "No se pudo generar el PDF.", "error");
         } finally { e.target.disabled = false; }
       });
       card.querySelector('[data-act="del"]').addEventListener("click", async () => {
         const rec = historialCache.find((c) => c.id === id);
         const ok = await showConfirm("Eliminar cotización",
-          `Se eliminará ${rec.numero} (${rec.data?.cliente || "sin cliente"}). Esta acción no se puede deshacer.`);
+          `Se eliminará ${rec.numero} (${rec.cliente || "sin cliente"}) junto con sus fotos. Esta acción no se puede deshacer.`);
         if (!ok) return;
         try {
           await Store.deleteCotizacion(id);
@@ -736,7 +739,7 @@
       const delBtn = card.querySelector('[data-act="del"]');
       if (delBtn) delBtn.addEventListener("click", async () => {
         const ok = await showConfirm("Eliminar usuario",
-          `Se eliminará el acceso de ${u.name} (${u.email}).`);
+          `Se eliminará el acceso de ${u.name} (${u.email}). Sus cotizaciones se conservan y quedan visibles solo para los Jefes.`);
         if (!ok) return;
         try {
           await Store.deleteUser(id);
