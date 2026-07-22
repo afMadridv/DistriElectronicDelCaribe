@@ -7,16 +7,30 @@
 // ============================================================
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-// Limita quién puede llamar la función. Define ALLOWED_ORIGIN con la URL
-// del portal (ej. https://distrielectronicdelcaribe.netlify.app):
-//   supabase secrets set ALLOWED_ORIGIN=https://tu-portal.netlify.app
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Vary": "Origin",
-};
+// Limita quién puede llamar la función. ALLOWED_ORIGIN acepta una o varias
+// URLs separadas por coma (útil para el dominio propio y el de Netlify):
+//   supabase secrets set ALLOWED_ORIGIN=https://tu-portal.netlify.app,https://tudominio.com
+// Si no se define, se acepta cualquier origen (comportamiento anterior).
+const sinBarra = (s: string) => s.trim().replace(/\/+$/, "");
+const ORIGENES = (Deno.env.get("ALLOWED_ORIGIN") ?? "")
+  .split(",").map(sinBarra).filter(Boolean);
+
+function cabecerasCors(req: Request): Record<string, string> {
+  const origen = sinBarra(req.headers.get("Origin") ?? "");
+  const permitido = ORIGENES.length === 0
+    ? (origen || "*")                                   // sin lista: no se bloquea a nadie
+    : (ORIGENES.includes(origen) ? origen : "");        // con lista: solo los de la lista
+  const h: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+  if (permitido) h["Access-Control-Allow-Origin"] = permitido;
+  return h;
+}
 
 Deno.serve(async (req) => {
+  const corsHeaders = cabecerasCors(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const json = (body: unknown, status = 200) =>
