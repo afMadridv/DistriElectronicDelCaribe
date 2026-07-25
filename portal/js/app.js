@@ -244,7 +244,10 @@
           container(false).appendChild(buildChecklistField(f, val));
           break;
         case "images":
-          formImages[f.key] = Array.isArray(val) ? [...val] : [];
+          // los registros anteriores guardaban solo la ruta: se normalizan
+          formImages[f.key] = (Array.isArray(val) ? val : [])
+            .map((v) => (v && typeof v === "object") ? { src: v.src, desc: v.desc || "" } : { src: v, desc: "" })
+            .filter((v) => v.src);
           container(false).appendChild(buildImagesField(f));
           break;
         case "signature":
@@ -267,13 +270,16 @@
 
   /* ----- campo: tabla de ítems ----- */
   function buildItemsField(f, val) {
+    const bancos = f.withBank ? (f.maxBancos || 4) : 0;
     const wrap = document.createElement("div");
     wrap.className = "field";
     wrap.dataset.itemsKey = f.key;
     wrap.dataset.withPrice = f.withPrice ? "1" : "";
     wrap.innerHTML = `
+      ${f.withBank ? `<p class="field-hint">Elige el banco de cada batería. La numeración se reinicia en cada banco y va sola.</p>` : ""}
       <table class="items-table">
         <thead><tr>
+          ${f.withBank ? '<th class="col-banco">Banco</th>' : ""}
           <th class="col-cant">${escapeHtml(f.colCant || "Cant.")}</th><th>${escapeHtml(f.colDesc || "Descripción")}</th>
           ${f.withPrice ? '<th class="col-precio">Vr. unitario</th>' : ""}
           <th class="col-del"></th>
@@ -284,18 +290,38 @@
       <button type="button" class="btn btn-ghost btn-sm add-row-btn">+ Agregar fila</button>`;
 
     const tbody = wrap.querySelector("tbody");
+
+    /* con autoNum el número no se escribe: se calcula por posición, y en las
+       tablas por banco se reinicia en cada uno (1, 2, 3… por banco) */
+    function renumerar() {
+      if (!f.autoNum) return;
+      const cuenta = {};
+      tbody.querySelectorAll("tr").forEach((tr) => {
+        const b = f.withBank ? (tr.querySelector(".it-banco").value || "1") : "1";
+        cuenta[b] = (cuenta[b] || 0) + 1;
+        tr.querySelector(".it-cant").value = cuenta[b];
+      });
+    }
+
     function addRow(item = {}) {
       const tr = document.createElement("tr");
+      const opciones = Array.from({ length: bancos }, (_, i) =>
+        `<option value="${i + 1}" ${String(item.banco || 1) === String(i + 1) ? "selected" : ""}>${i + 1}</option>`).join("");
       tr.innerHTML = `
-        <td class="col-cant"><input type="number" min="1" class="it-cant" value="${escapeHtml(item.cant || 1)}" /></td>
-        <td><input type="text" class="it-desc" value="${escapeHtml(item.descripcion || "")}" placeholder="Descripción" /></td>
+        ${f.withBank ? `<td class="col-banco"><select class="it-banco">${opciones}</select></td>` : ""}
+        <td class="col-cant"><input type="number" min="1" class="it-cant" value="${escapeHtml(item.cant || 1)}"
+          ${f.autoNum ? "readonly tabindex='-1'" : ""} /></td>
+        <td><input type="text" class="it-desc" value="${escapeHtml(item.descripcion || "")}" placeholder="${escapeHtml(f.placeholderDesc || f.colDesc || "Descripción")}" /></td>
         ${f.withPrice ? `<td class="col-precio"><input type="number" min="0" class="it-precio" value="${escapeHtml(item.precio ?? "")}" placeholder="0" /></td>` : ""}
         <td class="col-del"><button type="button" class="row-del" title="Quitar">×</button></td>`;
       tr.querySelector(".row-del").addEventListener("click", () => {
         tr.remove();
+        renumerar();
         updateTotal();
         schedulePreview();
       });
+      const selBanco = tr.querySelector(".it-banco");
+      if (selBanco) selBanco.addEventListener("change", () => { renumerar(); schedulePreview(); });
       tbody.appendChild(tr);
     }
 
@@ -312,8 +338,13 @@
 
     const items = Array.isArray(val) && val.length ? val : [{}];
     items.forEach(addRow);
+    renumerar();
     updateTotal();
-    wrap.querySelector(".add-row-btn").addEventListener("click", () => { addRow(); schedulePreview(); });
+    wrap.querySelector(".add-row-btn").addEventListener("click", () => {
+      addRow();
+      renumerar();
+      schedulePreview();
+    });
     return wrap;
   }
 
@@ -340,6 +371,7 @@
     wrap.className = "field";
     wrap.innerHTML = `
       <span>${f.label}</span>
+      <p class="field-hint">Van 6 fotos por página, numeradas. La descripción sale como «Figura N.» debajo de cada una.</p>
       <div class="img-thumbs"></div>
       <div class="img-drop"><span class="drop-icon">${window.ICONS.camera}</span> Haz clic para agregar imágenes (se comprimen automáticamente)</div>
       <input type="file" accept="image/*" multiple class="hidden img-input" />`;
@@ -349,21 +381,40 @@
 
     function renderThumbs() {
       thumbs.innerHTML = "";
-      formImages[f.key].forEach((src, i) => {
+      formImages[f.key].forEach((foto, i) => {
         const t = document.createElement("div");
         t.className = "img-thumb";
+
         const img = document.createElement("img");
         // el valor guardado es una ruta del bucket privado: hay que firmarla
-        Store.imageUrl(src).then((u) => { img.src = u; }).catch(() => {});
+        Store.imageUrl(foto.src).then((u) => { img.src = u; }).catch(() => {});
+
         const del = document.createElement("button");
         del.type = "button";
+        del.className = "thumb-del";
         del.textContent = "×";
         del.addEventListener("click", () => {
           formImages[f.key].splice(i, 1);
           renderThumbs();
           schedulePreview();
         });
-        t.append(img, del);
+
+        const num = document.createElement("span");
+        num.className = "thumb-num";
+        num.textContent = `Figura ${i + 1}`;
+
+        const desc = document.createElement("input");
+        desc.type = "text";
+        desc.className = "thumb-desc";
+        desc.maxLength = 90;
+        desc.placeholder = "Descripción de la foto";
+        desc.value = foto.desc || "";
+        desc.addEventListener("input", () => {
+          formImages[f.key][i].desc = desc.value;
+          schedulePreview();
+        });
+
+        t.append(img, del, num, desc);
         thumbs.appendChild(t);
       });
     }
@@ -373,7 +424,7 @@
       for (const file of input.files) {
         try {
           const dataURL = await Store.compressImage(file);
-          formImages[f.key].push(dataURL);
+          formImages[f.key].push({ src: dataURL, desc: "" });
         } catch { toast("No se pudo leer una imagen.", "error"); }
       }
       input.value = "";
@@ -500,6 +551,8 @@
               cant: tr.querySelector(".it-cant").value,
               descripcion: tr.querySelector(".it-desc").value.trim(),
             };
+            const banco = tr.querySelector(".it-banco");
+            if (banco) item.banco = Number(banco.value) || 1;
             const precio = tr.querySelector(".it-precio");
             if (precio) item.precio = precio.value;
             if (item.descripcion) rows.push(item);
@@ -585,9 +638,10 @@
       // sube imágenes nuevas (dataURL) al almacenamiento
       for (const f of format.fields) {
         if (f.type === "images" && Array.isArray(data[f.key])) {
-          data[f.key] = await Promise.all(
-            data[f.key].map((src) => src.startsWith("data:") ? Store.uploadImage(src) : src)
-          );
+          data[f.key] = await Promise.all(data[f.key].map(async (foto) => ({
+            src: String(foto.src).startsWith("data:") ? await Store.uploadImage(foto.src) : foto.src,
+            desc: foto.desc || "",
+          })));
         }
       }
 

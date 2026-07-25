@@ -6,7 +6,8 @@
    text | textarea | date | number | select | items | images |
    signature | checklist
    - "half: true" pone dos campos en la misma fila.
-   - items: colCant / colDesc personalizan encabezados; withPrice agrega precios.
+   - items: colCant / colDesc personalizan encabezados; withPrice agrega precios;
+            autoNum numera las filas solo; withBank agrega la columna Banco.
    - checklist: rows [{key,label}] + options [...] (mismo select por fila).
    - signature: nameKey indica el campo de texto con el nombre del firmante.
    ============================================================ */
@@ -14,6 +15,7 @@
 const CHK_ESTADO = ["Bien", "Mal", "Regular", "N/A", "NAC", "NP"];
 const CHK_SINO = ["Sí", "No"];
 const CHK_BRM = ["Bueno", "Regular", "Malo"];
+const FASES = ["Trifásico", "Bifásico", "Monofásico"];
 
 /* Iconos SVG (trazo, estilo Feather) */
 const svg = (paths) =>
@@ -45,7 +47,7 @@ window.FORMATS = {
       { key: "fecha", label: "Fecha", type: "date", required: true, half: true },
       { key: "hora_servicio", label: "Hora de servicio", type: "text", half: true, placeholder: "Ej: 8:00 a.m. - 12:00 m." },
       { section: "Actividad realizada" },
-      { key: "actividades", label: "Actividades", type: "items", colCant: "Ítem", colDesc: "Descripción" },
+      { key: "actividades", label: "Actividades", type: "items", colCant: "Ítem", colDesc: "Descripción", autoNum: true },
       { section: "Material utilizado o anotaciones" },
       { key: "materiales", label: "Materiales", type: "items", colCant: "Cantidad", colDesc: "Descripción" },
       { section: "Evidencia fotográfica" },
@@ -76,24 +78,43 @@ window.FORMATS = {
       { key: "cliente", label: "Cliente", type: "text", required: true, half: true },
       { key: "fecha", label: "Fecha", type: "date", required: true, half: true },
       { key: "direccion", label: "Dirección", type: "text", half: true },
+      { key: "codigo", label: "Código", type: "text", half: true },
       { key: "oficina", label: "Oficina / Sucursal", type: "text", half: true },
       { key: "lugar", label: "Lugar", type: "text", half: true },
       { key: "ciudad", label: "Ciudad", type: "text", half: true },
+      { key: "mantenimiento_n", label: "Mantenimiento N°", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "mantenimiento_de", label: "Mantenimiento — de", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "hoja_n", label: "Hoja N°", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "hoja_de", label: "Hoja — de", type: "text", half: true, placeholder: "Ej: 3" },
       { section: "Datos del equipo" },
       { key: "marca", label: "Marca", type: "text", half: true },
       { key: "modelo", label: "Modelo", type: "text", half: true },
       { key: "potencia", label: "Potencia (KVA)", type: "text", half: true },
       { key: "serie", label: "Serie", type: "text", half: true },
       { key: "inventario", label: "Inventario", type: "text", half: true },
-      { key: "bancos_baterias", label: "N° de bancos de baterías", type: "text", half: true, placeholder: "Ej: 1" },
-      { key: "baterias_cantidad", label: "N° de baterías", type: "text", half: true, placeholder: "Ej: 20" },
-      { key: "referencia_baterias", label: "Referencia de baterías", type: "text", half: true, placeholder: "Ej: RT12100" },
-      { key: "marca_baterias", label: "Marca de baterías", type: "text", half: true, placeholder: "Ej: RITAR" },
+      /* La plantilla dice: «__ BANCO(S) DE __ BATERÍAS Ó __ CELDAS» */
+      { key: "n_bancos", label: "N° de bancos", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "bancos_baterias", label: "N° de baterías por banco", type: "text", half: true, placeholder: "Ej: 4" },
+      { key: "baterias_cantidad", label: "N° de celdas", type: "text", half: true, placeholder: "Ej: 24" },
+      { key: "referencia_baterias", label: "Referencia de baterías", type: "text", half: true, placeholder: "Ej: FL1290 GS" },
+      { key: "marca_baterias", label: "Marca de baterías", type: "text", half: true, placeholder: "Ej: FULIBATTERY" },
+      { key: "baterias_instaladas", label: "Baterías instaladas por", type: "select", half: true,
+        options: ["Instaladas por DC", "Por otros"] },
       { section: "Procedimiento" },
       { key: "procedimiento", label: "Procedimiento seguido, repuestos utilizados y alarmas o daños encontrados", type: "textarea", required: true },
       { section: "Medidas sobre el equipo" },
+      /* Se escriben a mano. Si el valor coincide con una de las opciones
+         impresas en la plantilla (480/380/240 y 220/208/120) se marca esa
+         casilla sola; da igual cómo se escriba: «480», «480V», «480 vac». */
+      { key: "voltaje_nominal_ab", label: "Voltaje nominal (columna izquierda)", type: "text", half: true,
+        placeholder: "480 / 380 / 240" },
+      { key: "voltaje_nominal_an", label: "Voltaje nominal (columna derecha)", type: "text", half: true,
+        placeholder: "220 / 208 / 120" },
+      { key: "fase_entrada", label: "Entrada — fases", type: "select", half: true, options: FASES },
       { key: "voltaje_entrada", label: "Voltaje de entrada — VAB/VBC/VCA/VAN/VBN/VCN", type: "text", half: true, placeholder: "Ej: 208/208/209/120/121/120" },
+      { key: "fase_salida", label: "Salida — fases", type: "select", half: true, options: FASES },
       { key: "voltaje_salida", label: "Voltaje de salida — VAB/VBC/VCA/VAN/VBN/VCN", type: "text", half: true, placeholder: "Ej: 208/208/209/120/121/120" },
+      { key: "fase_bypass", label: "Bypass — fases", type: "select", half: true, options: FASES },
       { key: "voltaje_bypass", label: "Voltaje del bypass — VAB/VBC/VCA/VAN/VBN/VCN", type: "text", half: true },
       { key: "corrientes_entrada", label: "Corrientes de entrada (A/B/C)", type: "text", half: true, placeholder: "Ej: 12 / 11.8 / 12.1 Amp" },
       { key: "corrientes_salida", label: "Corrientes de salida (A/B/C)", type: "text", half: true },
@@ -102,6 +123,7 @@ window.FORMATS = {
       { key: "corriente_tierra", label: "Corriente por tierra (Amp)", type: "text", half: true },
       { key: "frecuencia", label: "Frecuencia entrada/salida (Hz)", type: "text", half: true, placeholder: "Ej: 60 / 60" },
       { key: "temperatura", label: "Temperatura de la UPS (°C)", type: "text", half: true },
+      { key: "hora_medidas", label: "Hora de la lectura de medidas", type: "text", half: true, placeholder: "Ej: 2:23 PM" },
       { key: "voltaje_cargador", label: "Voltaje cargador de baterías (VDC)", type: "text", half: true },
       { key: "corriente_cargador", label: "Corriente cargador (A)", type: "text", half: true },
       { key: "potencia_utilizada", label: "Potencia utilizada (KW / KVA)", type: "text", half: true },
@@ -116,8 +138,17 @@ window.FORMATS = {
         { key: "gravedad_especifica", label: "Medición gravedad específica" },
         { key: "voltaje_cada_bateria", label: "Medición voltaje en cada batería" },
       ]},
-      { key: "voltajes_baterias", label: "Voltaje por batería (opcional)", type: "items", colCant: "Batería N°", colDesc: "Voltaje (VDC)" },
+      /* La numeración de cada batería es automática y se reinicia en cada
+         banco; el banco se elige por fila (la página 2 tiene 4 columnas). */
+      { key: "voltajes_baterias", label: "Voltaje por batería (opcional)", type: "items",
+        colCant: "Batería N°", colDesc: "Voltaje / resistencia", autoNum: true, withBank: true, maxBancos: 4,
+        placeholderDesc: "Ej: 13,56 Vdc 16 mΩ" },
+      { key: "banco1_ubicacion", label: "Banco 1 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
+      { key: "banco2_ubicacion", label: "Banco 2 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
+      { key: "banco3_ubicacion", label: "Banco 3 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
+      { key: "banco4_ubicacion", label: "Banco 4 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
       { section: "Inspección visual" },
+      { key: "detalles", label: "Detalles de la inspección visual", type: "textarea" },
       { key: "chk_inspeccion", label: "Inspección", type: "checklist", options: CHK_ESTADO, rows: [
         { key: "luces_displays", label: "Luces indicadoras y displays" },
         { key: "extractores", label: "Extractores de aire" },
@@ -184,6 +215,10 @@ window.FORMATS = {
       { key: "oficina", label: "Oficina / Cod. oficina", type: "text", half: true },
       { key: "lugar", label: "Lugar", type: "text", half: true },
       { key: "ciudad", label: "Ciudad", type: "text", half: true },
+      { key: "mantenimiento_n", label: "Mantenimiento N°", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "mantenimiento_de", label: "Mantenimiento — de", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "hoja_n", label: "Hoja N°", type: "text", half: true, placeholder: "Ej: 1" },
+      { key: "hoja_de", label: "Hoja — de", type: "text", half: true, placeholder: "Ej: 2" },
       { key: "condicion", label: "Condición", type: "select", half: true,
         options: ["Garantía", "Contrato", "Orden de trabajo", "Solicitud escrita o telefónica"] },
       { key: "estado_equipo_inicio", label: "Estado del equipo", type: "select", half: true,
@@ -206,6 +241,8 @@ window.FORMATS = {
       { key: "breaker", label: "Breaker — corriente y estado", type: "text", half: true, placeholder: "Ej: 100 A, bueno" },
       { key: "precalentador", label: "Precalentador funcionando", type: "select", half: true, options: CHK_SINO },
       { key: "voltaje_baterias", label: "Baterías — Voltaje total (VDC)", type: "text", half: true },
+      { key: "estado_final", label: "Estado final del equipo", type: "select", half: true,
+        options: ["En línea", "No está en línea", "Fuera de servicio"] },
       { key: "cargador_externo", label: "Cargador externo de baterías", type: "select", half: true, options: ["Bueno", "Malo", "No tiene"] },
       { key: "medidores", label: "Medidores (voltaje / corriente)", type: "select", half: true, options: ["Buenos", "Malos", "No tiene"] },
       { key: "chk_baterias", label: "Baterías", type: "checklist", options: CHK_SINO, rows: [
@@ -266,15 +303,22 @@ window.FORMATS = {
       { key: "chk_tablero", label: "Tablero", type: "checklist", options: CHK_SINO, rows: [
         { key: "totalizador", label: "Totalizador de salida a carga" },
         { key: "breaker_distribucion", label: "Breaker de distribución" },
+        { key: "transferencia_automatica", label: "Transferencia automática" },
+        { key: "transferencia_manual", label: "Transferencia manual" },
       ]},
       { key: "chk_pruebas", label: "Pruebas", type: "checklist", options: ["Sí - Bien", "Sí - Mal", "No"], rows: [
         { key: "arranque_planta", label: "Arranque de la planta" },
         { key: "transferencia_automatica", label: "Transferencia automática" },
         { key: "transferencia_manual", label: "Transferencia manual" },
       ]},
-      { key: "horometro", label: "Registro del horómetro", type: "text", half: true },
+      { key: "horometro", label: "Registro del horómetro", type: "text", half: true, placeholder: "Ej: 1149 H 4 m" },
+      { key: "hora_medidas", label: "Hora en que se tomaron las medidas", type: "text", half: true, placeholder: "Ej: 10:50 AM" },
       { key: "funcionamiento_previo", label: "Funcionamiento en días anteriores", type: "select", half: true,
         options: ["Correcto", "Incorrecto", "No saben"] },
+      { section: "Detalles por sección" },
+      { key: "detalles_motor", label: "Detalles — revisión mecánica del motor", type: "textarea",
+        placeholder: "Repuestos e insumos utilizados, referencias…" },
+      { key: "detalles_sistema", label: "Detalles — revisión general del sistema", type: "textarea" },
       { section: "Trabajo realizado" },
       { key: "trabajo_realizado", label: "Trabajo realizado", type: "textarea", required: true },
       { key: "observaciones", label: "Observaciones y comentarios acerca del sistema", type: "textarea" },

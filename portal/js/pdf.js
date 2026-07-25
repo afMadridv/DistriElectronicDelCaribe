@@ -11,7 +11,9 @@ const PDFLib = isNode ? require("pdf-lib") : root.PDFLib;
 const PLANTILLAS = isNode ? require("./plantillas.js") : root.PLANTILLAS;
 
 const { PDFDocument, StandardFonts, rgb } = PDFLib;
-const INK = rgb(0.05, 0.05, 0.35); // azul oscuro tipo esfero
+const INK = rgb(0.05, 0.05, 0.35);      // azul oscuro tipo esfero
+const MARCA = rgb(0.16, 0.72, 0.94);    // cian del relleno de las casillas
+const MARCA_X = rgb(0.00, 0.42, 0.75);  // azul de la X donde no hay recuadro
 
 const templateCache = {};
 
@@ -43,6 +45,23 @@ function fit(font, text, size, maxW) {
   return t;
 }
 
+/* Deja el texto comparable: sin tildes, mayúsculas, espacios ni la unidad
+   de voltaje, para que «480 VAC», «480v» y «480» se traten como iguales. */
+function clave(s) {
+  return String(s ?? "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")   // quita tildes
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")                          // quita espacios y signos
+    .replace(/V(AC|DC)?$/, "");                          // quita la unidad final
+}
+
+/* Busca en el mapa de opciones la que equivalga al valor escrito */
+function igual(mapa, valor) {
+  const k = clave(valor);
+  if (!k) return undefined;
+  return Object.keys(mapa).find((op) => clave(op) === k);
+}
+
 function wrapText(font, text, size, maxW) {
   const words = String(text ?? "").replace(/\r/g, "").split(/\s+|\n/);
   const paras = String(text ?? "").replace(/\r/g, "").split("\n");
@@ -59,21 +78,40 @@ function wrapText(font, text, size, maxW) {
   return lines;
 }
 
+/* Carga una imagen y la incrusta en el PDF. Devuelve null si no se pudo,
+   pero SIEMPRE deja el motivo en la consola: antes fallaba en silencio y
+   las páginas de fotos salían en blanco sin ninguna pista. */
 async function embedImg(doc, src) {
   try {
+    if (typeof src !== "string" || !src) return null;
     let bytes;
-    if (typeof src === "string" && src.startsWith("data:")) {
-      const b64 = src.split(",")[1];
+    if (src.startsWith("data:")) {
+      const b64 = src.split(",")[1] || "";
       bytes = isNode ? Buffer.from(b64, "base64")
         : Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    } else if (!isNode) {
+    } else {
       const res = await fetch(src);
+      if (!res.ok) throw new Error(`HTTP ${res.status} al descargar la imagen`);
       bytes = new Uint8Array(await res.arrayBuffer());
-    } else return null;
+    }
+    if (!bytes || bytes.length < 4) throw new Error("La imagen llegó vacía");
+    /* pdf-lib lee la imagen con `new DataView(bytes.buffer)`, SIN tener en
+       cuenta byteOffset. Buffer.from() de Node devuelve una vista sobre un
+       búfer compartido más grande, así que pdf-lib leía desde el principio
+       de ese búfer y no de la foto: de ahí el error «SOI not found in JPEG»
+       y las páginas de evidencia en blanco. Con una copia propia el offset
+       siempre es 0 y la imagen se incrusta bien. */
+    if (bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
+      bytes = new Uint8Array(bytes);
+    }
     // PNG empieza con 0x89 0x50
     const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
     return isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
-  } catch { return null; }
+  } catch (e) {
+    const ref = String(src || "").slice(0, 80);
+    console.warn("No se pudo incrustar la imagen:", ref, "→", e.message);
+    return null;
+  }
 }
 
 async function build(formatKey, record, opts = {}) {
@@ -104,14 +142,34 @@ async function build(formatKey, record, opts = {}) {
     const dx = center && maxW ? Math.max(0, (maxW - f.widthOfTextAtSize(t, s)) / 2) : 0;
     page.drawText(t, { x: x + dx, y, size: s, font: f, color: INK });
   };
-  /* (x,y) es el CENTRO de la casilla: la X se centra sobre ese punto para
-     que nunca sobresalga del recuadro. 0.717 es la altura de mayúscula
-     de Helvetica-Bold, así que y - 0.717*size/2 deja la X centrada. */
-  const drawX = (page, x, y, size = 8) => {
+  /* (x,y) es el CENTRO de la casilla. Si se conoce el tamaño del recuadro
+     (box = [ancho, alto]) se rellena de color, como en los reportes hechos
+     a mano, y la X va encima para que se siga leyendo impreso en blanco y
+     negro. Donde la plantilla no dibuja recuadro (plantas y A.A marcan al
+     lado de la palabra) va solo la X, en color.
+     0.717 es la altura de mayúscula de Helvetica-Bold: restar 0.3585*size
+     deja la X centrada en el punto. */
+  const drawX = (page, x, y, size = 8, box = null, soloColor = false) => {
+    if (box) {
+      const [bw, bh] = box;
+      const m = soloColor ? 0 : 0.55;       // deja ver el borde del recuadro
+      page.drawRectangle({
+        x: x - bw / 2 + m, y: y - bh / 2 + m,
+        width: Math.max(bw - m * 2, 0), height: Math.max(bh - m * 2, 0),
+        color: MARCA,
+        /* el resalte va translúcido para que la letra impresa debajo
+           (B / R / M) se siga leyendo */
+        opacity: soloColor ? 0.5 : 1,
+      });
+      /* Donde la opción ya viene impresa (las letras B/R/M del formato de
+         A.A) solo se resalta en color: una X encima taparía la letra. */
+      if (soloColor) return;
+      size = Math.min(size, bh * 0.82);     // la X nunca desborda la casilla
+    }
     page.drawText("X", {
       x: x - bold.widthOfTextAtSize("X", size) / 2,
       y: y - size * 0.3585,
-      size, font: bold, color: INK,
+      size, font: bold, color: box ? INK : MARCA_X,
     });
   };
 
@@ -122,9 +180,11 @@ async function build(formatKey, record, opts = {}) {
     }
   }
 
-  /* textos simples; join une varios campos en una misma línea */
+  /* textos simples; join une varios campos en una misma línea y src
+     permite repetir el mismo dato en otra página (p. ej. «HOJA _ DE _») */
   for (const t of cfg.text || []) {
-    let val = t.date ? fmtDate(data[t.key]) : data[t.key];
+    const origen = t.src || t.key;
+    let val = t.date ? fmtDate(data[origen]) : data[origen];
     if (t.join) {
       val = [val, ...t.join.map((k) => data[k])]
         .map((v) => (v == null ? "" : String(v).trim()))
@@ -174,11 +234,18 @@ async function build(formatKey, record, opts = {}) {
     });
   }
 
-  /* marcas X según selects */
+  /* marcas X — [x, y] o [x, y, ancho, alto] de la casilla.
+     El valor puede venir de un select o escrito a mano, así que si no
+     coincide exacto se compara sin tildes, mayúsculas ni unidades: «480»,
+     «480V» y «480 vac» marcan la misma casilla que «480 VAC». */
   for (const m of cfg.marks || []) {
     const val = data[m.src || m.key];
-    if (!val || !m.map[val]) continue;
-    for (const [x, y] of m.map[val]) drawX(P(m.page), x, y);
+    if (!val) continue;
+    const pts = m.map[val] || m.map[igual(m.map, val)];
+    if (!pts) continue;
+    for (const [x, y, bw, bh] of pts) {
+      drawX(P(m.page), x, y, 8, bw ? [bw, bh] : null);
+    }
   }
 
   /* checklists (fila → opción) */
@@ -188,24 +255,25 @@ async function build(formatKey, record, opts = {}) {
       const val = obj[rowKey];
       if (!val) continue;
       const x = g.opts[val];
-      if (x != null) drawX(P(g.page), x, y, 7.5);
-      else if (g.onlyYes && val === "Sí" && g.opts["Sí"] != null) drawX(P(g.page), g.opts["Sí"], y, 7.5);
+      if (x != null) drawX(P(g.page), x, y, 7.5, g.box, g.hl);
+      else if (g.onlyYes && val === "Sí" && g.opts["Sí"] != null) drawX(P(g.page), g.opts["Sí"], y, 7.5, g.box, g.hl);
     }
   }
 
   /* pruebas de plantas (Sí-Bien / Sí-Mal / No) */
   if (cfg.pruebas) {
     const obj = data.chk_pruebas || {};
+    const caja = cfg.pruebas.box;
     for (const [key, pos] of Object.entries(cfg.pruebas)) {
-      if (key === "page") continue;
+      if (key === "page" || key === "box") continue;
       const val = obj[key];
       if (!val) continue;
       const page = P(cfg.pruebas.page);
       if (val.startsWith("Sí")) {
-        drawX(page, pos.si, pos.y, 7.5);
-        if (val.includes("Bien")) drawX(page, pos.bien, pos.y, 7.5);
-        if (val.includes("Mal")) drawX(page, pos.mal, pos.y, 7.5);
-      } else if (val === "No") drawX(page, pos.no, pos.y, 7.5);
+        drawX(page, pos.si, pos.y, 7.5, caja);
+        if (val.includes("Bien")) drawX(page, pos.bien, pos.y, 7.5, caja);
+        if (val.includes("Mal")) drawX(page, pos.mal, pos.y, 7.5, caja);
+      } else if (val === "No") drawX(page, pos.no, pos.y, 7.5, caja);
     }
   }
 
@@ -213,14 +281,18 @@ async function build(formatKey, record, opts = {}) {
   if (cfg.bateriasChk) {
     const obj = data.chk_baterias || {};
     const page = P(cfg.bateriasChk.page);
-    if (obj.libres_mantenimiento === "Sí") drawX(page, ...cfg.bateriasChk.libres.si, 7.5);
-    if (obj.libres_mantenimiento === "No") drawX(page, ...cfg.bateriasChk.libres.no, 7.5);
+    const caja = cfg.bateriasChk.box;
+    if (obj.libres_mantenimiento === "Sí") drawX(page, ...cfg.bateriasChk.libres.si, 7.5, caja);
+    if (obj.libres_mantenimiento === "No") drawX(page, ...cfg.bateriasChk.libres.no, 7.5, caja);
     for (const [key, pos] of Object.entries(cfg.bateriasChk.simple)) {
-      if (obj[key] === "Sí") drawX(page, pos[0], pos[1], 7.5);
+      if (obj[key] === "Sí") drawX(page, pos[0], pos[1], 7.5, caja);
     }
   }
 
-  /* tabla de voltajes por batería (UPS pág. 2) */
+  /* tabla de voltajes por batería (UPS pág. 2)
+     Cada fila trae su banco (1..4) y va a la columna que le toca. Las que
+     no lo traigan (registros anteriores) se reparten llenando un banco tras
+     otro, como se hacía antes. */
   if (cfg.baterias) {
     const rows = (data.voltajes_baterias || []).filter((r) => (r.descripcion || "").trim());
     if (rows.length) {
@@ -228,12 +300,24 @@ async function build(formatKey, record, opts = {}) {
       const page = P(bt.page);
       const n = bt.numero;
       drawText(page, record.numero || "", n.x, n.y, n.size, n.maxW || 110, true, n.c);
-      rows.slice(0, bt.max * bt.xBanks.length).forEach((r, i) => {
-        const bank = Math.floor(i / bt.max);
-        const row = i % bt.max;
-        if (row === 0) drawText(page, String(bank + 1), bt.bancoNoX[bank], bt.bancoNoY, 8, 18, true, true);
+
+      const nBancos = bt.xBanks.length;
+      const porBanco = Array.from({ length: nBancos }, () => []);
+      rows.forEach((r, i) => {
+        const banco = Number(r.banco) >= 1 && Number(r.banco) <= nBancos
+          ? Number(r.banco) - 1
+          : Math.floor(i / bt.max);
+        if (banco < nBancos) porBanco[banco].push(r);
+      });
+
+      porBanco.forEach((lista, banco) => {
+        if (!lista.length) return;
+        drawText(page, String(banco + 1), bt.bancoNoX[banco], bt.bancoNoY, 8, bt.bancoNoW || 18, true, true);
         /* la plantilla ya trae numerada cada batería: solo va el voltaje */
-        drawText(page, r.descripcion, bt.xBanks[bank], bt.yTop - row * bt.step, bt.size, bt.colW || 70, false, true);
+        lista.slice(0, bt.max).forEach((r, fila) => {
+          drawText(page, r.descripcion, bt.xBanks[banco], bt.yTop - fila * bt.step,
+                   bt.size, bt.colW || 70, false, true);
+        });
       });
     }
   }
@@ -250,27 +334,97 @@ async function build(formatKey, record, opts = {}) {
     P(s.page).drawImage(img, { x: s.cx != null ? s.cx - w / 2 : s.x, y: s.y, width: w, height: h });
   }
 
-  /* evidencia fotográfica: páginas extra al final (no toca la plantilla) */
-  const fotos = data.imagenes || [];
+  /* ---------- REGISTRO FOTOGRÁFICO ----------
+     Páginas extra al final (no tocan la plantilla): 6 fotos por página en
+     dos columnas por tres filas, cada una numerada «Figura N.» con su
+     descripción debajo. Cada foto puede ser un texto (la imagen suelta) o
+     un objeto { src, desc }. */
+  const fotos = (data.imagenes || []).map((f) =>
+    (f && typeof f === "object") ? f : { src: f, desc: "" });
+
   if (fotos.length) {
-    const perPage = 4;
-    for (let p = 0; p < fotos.length; p += perPage) {
+    const COLS = 2, FILAS = 3, PORPAG = COLS * FILAS;
+    const MX = 45;                                  // margen lateral
+    const CELDA_W = (612 - MX * 2) / COLS;          // 261
+    const CELDA_H = 218;                            // foto + pie
+    const PIE_H = 26;                               // alto del pie de foto
+    const TOP = 726;                                // borde superior de la rejilla
+    const GRIS = rgb(0.25, 0.25, 0.25);
+
+    for (let p = 0; p < fotos.length; p += PORPAG) {
       const page = doc.addPage([612, 792]);
-      page.drawText("EVIDENCIA FOTOGRÁFICA — " + (record.numero || ""), {
-        x: 50, y: 750, size: 12, font: bold, color: rgb(0.08, 0.08, 0.08),
+      const numero = record.numero || "";
+
+      /* encabezado */
+      const titulo = "REGISTRO FOTOGRÁFICO";
+      page.drawText(titulo, {
+        x: (612 - bold.widthOfTextAtSize(titulo, 13)) / 2,
+        y: 752, size: 13, font: bold, color: rgb(0.08, 0.08, 0.08),
       });
-      page.drawLine({ start: { x: 50, y: 744 }, end: { x: 562, y: 744 }, thickness: 1.5, color: rgb(1, 0.77, 0) });
-      const chunk = fotos.slice(p, p + perPage);
+      if (numero) {
+        drawText(page, numero, MX, 738, 9, 612 - MX * 2, true, true);
+      }
+      page.drawLine({
+        start: { x: MX, y: TOP + 4 }, end: { x: 612 - MX, y: TOP + 4 },
+        thickness: 1.5, color: rgb(1, 0.77, 0),
+      });
+
+      const chunk = fotos.slice(p, p + PORPAG);
       for (let i = 0; i < chunk.length; i++) {
-        const img = await embedImg(doc, chunk[i]);
-        if (!img) continue;
-        const cellW = 240, cellH = 310;
-        const x0 = 50 + (i % 2) * 262;
-        const y0 = 410 - Math.floor(i / 2) * 330;
-        const scale = Math.min(cellW / img.width, cellH / img.height);
-        const w = img.width * scale, h = img.height * scale;
-        page.drawImage(img, { x: x0, y: y0 + (cellH - h), width: w, height: h });
-        page.drawRectangle({ x: x0, y: y0 + (cellH - h), width: w, height: h, borderColor: rgb(0.2, 0.2, 0.2), borderWidth: 0.8 });
+        const col = i % COLS, fila = Math.floor(i / COLS);
+        const x0 = MX + col * CELDA_W;
+        const yTop = TOP - fila * CELDA_H;           // borde superior de la celda
+        const yBase = yTop - CELDA_H;                // borde inferior de la celda
+        const areaH = CELDA_H - PIE_H;
+
+        /* recuadro de la celda */
+        page.drawRectangle({
+          x: x0, y: yBase, width: CELDA_W, height: CELDA_H,
+          borderColor: GRIS, borderWidth: 0.8,
+        });
+        page.drawLine({
+          start: { x: x0, y: yBase + PIE_H }, end: { x: x0 + CELDA_W, y: yBase + PIE_H },
+          thickness: 0.8, color: GRIS,
+        });
+
+        /* la foto, centrada y sin deformar dentro de su celda */
+        const img = await embedImg(doc, chunk[i].src);
+        if (img) {
+          const escala = Math.min((CELDA_W - 10) / img.width, (areaH - 10) / img.height);
+          const w = img.width * escala, h = img.height * escala;
+          page.drawImage(img, {
+            x: x0 + (CELDA_W - w) / 2,
+            y: yBase + PIE_H + (areaH - h) / 2,
+            width: w, height: h,
+          });
+        } else {
+          /* si la imagen no se pudo cargar, se deja constancia en el PDF
+             en vez de dejar el hueco en blanco sin explicación */
+          const aviso = "(No se pudo cargar la imagen)";
+          page.drawText(aviso, {
+            x: x0 + (CELDA_W - font.widthOfTextAtSize(aviso, 8)) / 2,
+            y: yBase + PIE_H + areaH / 2, size: 8, font, color: rgb(0.6, 0.2, 0.2),
+          });
+        }
+
+        /* pie: «Figura N.» en negrita y la descripción a continuación */
+        const etiqueta = `Figura ${p + i + 1}.`;
+        const anchoEtiqueta = bold.widthOfTextAtSize(etiqueta, 8);
+        page.drawText(etiqueta, {
+          x: x0 + 5, y: yBase + PIE_H - 11, size: 8, font: bold, color: rgb(0.08, 0.08, 0.08),
+        });
+        const desc = String(chunk[i].desc || "").trim();
+        if (desc) {
+          const libre = CELDA_W - 12 - anchoEtiqueta - 3;
+          const lineas = wrapText(font, desc, 8, libre).slice(0, 2);
+          lineas.forEach((linea, n) => {
+            page.drawText(fit(font, linea, 8, n === 0 ? libre : CELDA_W - 12), {
+              x: n === 0 ? x0 + 5 + anchoEtiqueta + 3 : x0 + 5,
+              y: yBase + PIE_H - 11 - n * 9.5,
+              size: 8, font, color: rgb(0.08, 0.08, 0.08),
+            });
+          });
+        }
       }
     }
   }

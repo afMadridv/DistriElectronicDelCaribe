@@ -63,14 +63,25 @@ const PLANTILLAS = {
       { key: "cliente", page: 0, x: 96.3, y: 629.5, size: 8, maxW: 260.2, c: 1 },
       { key: "fecha", page: 0, x: 396.8, y: 629.5, size: 8, maxW: 82.4, date: true, c: 1 },
       { key: "direccion", page: 0, x: 105, y: 611.8, size: 8, maxW: 207.8, c: 1 },
+      { key: "codigo", page: 0, x: 370.2, y: 611.8, size: 8, maxW: 39.8, c: 1 },
+      { key: "mantenimiento_n", page: 0, x: 391, y: 559, size: 8, maxW: 16, c: 1 },
+      { key: "mantenimiento_de", page: 0, x: 434.5, y: 559, size: 8, maxW: 16, c: 1 },
+      { key: "hoja_n", page: 0, x: 486, y: 559, size: 8, maxW: 16, c: 1 },
+      { key: "hoja_de", page: 0, x: 529.5, y: 559, size: 8, maxW: 16, c: 1 },
+      /* La HOJA se repite en las páginas 2 y 3 */
+      { key: "hoja_n2", src: "hoja_n", page: 1, x: 527, y: 637, size: 8, maxW: 16, c: 1 },
+      { key: "hoja_de2", src: "hoja_de", page: 1, x: 556, y: 637, size: 8, maxW: 20, c: 1 },
+      { key: "hoja_n3", src: "hoja_n", page: 2, x: 422, y: 748.9, size: 8, maxW: 23, c: 1 },
+      { key: "hoja_de3", src: "hoja_de", page: 2, x: 474, y: 748.9, size: 8, maxW: 15, c: 1 },
+      { key: "hora_medidas", page: 0, x: 435, y: 316.8, size: 8, maxW: 90, c: 1 },
       { key: "oficina", page: 0, x: 87.7, y: 594.2, size: 8, maxW: 92.1, c: 1 },
       { key: "lugar", page: 0, x: 219, y: 594.2, size: 8, maxW: 93.8, c: 1 },
       { key: "ciudad", page: 0, x: 378.8, y: 594.2, size: 8, maxW: 201.2, c: 1 },
       { key: "marca", page: 0, x: 175.2, y: 576.5, size: 8, maxW: 129.3, c: 1 },
       { key: "modelo", page: 0, x: 344.7, y: 576.5, size: 8, maxW: 90.8, c: 1 },
       { key: "potencia", page: 0, x: 484.2, y: 576.5, size: 8, maxW: 95.8, c: 1 },
-      /* la plantilla trae una sola línea para serie/inventario */
       { key: "serie", page: 0, x: 175.2, y: 558.9, size: 7, maxW: 137.6, c: 1, join: ["inventario"] },
+      { key: "n_bancos", page: 0, x: 51.5, y: 541.2, size: 7, maxW: 15.3, c: 1 },
       { key: "bancos_baterias", page: 0, x: 122, y: 541.2, size: 7, maxW: 15.2, c: 1 },
       { key: "baterias_cantidad", page: 0, x: 192.5, y: 541.2, size: 7, maxW: 23.5, c: 1 },
       { key: "referencia_baterias", page: 0, x: 387.3, y: 541.2, size: 7, maxW: 67.4, c: 1 },
@@ -79,7 +90,7 @@ const PLANTILLAS = {
       { key: "corriente_neutro", page: 0, x: 492, y: 230, size: 7, maxW: 41.5, c: 1 },
       { key: "corriente_tierra", page: 0, x: 492, y: 212.4, size: 7, maxW: 41.5, c: 1 },
       { key: "temperatura", page: 0, x: 380, y: 150.1, size: 8, maxW: 40, c: 1 },
-      { key: "voltaje_cargador", page: 0, x: 446.3, y: 167.7, size: 8, maxW: 115, c: 1 },
+      { key: "voltaje_cargador", page: 0, x: 446.3, y: 154.1, size: 8, maxW: 117, c: 1 },
       { key: "corriente_cargador", page: 0, x: 519, y: 139.1, size: 8, maxW: 54, c: 1 },
       { key: "factor_potencia", page: 0, x: 146.8, y: 94.9, size: 8, maxW: 17, c: 1 },
       { key: "duracion_mantenimiento", page: 2, x: 237.2, y: 331, size: 8, maxW: 75.6, c: 1 },
@@ -93,46 +104,57 @@ const PLANTILLAS = {
       { key: "corrientes_entrada", page: 0, x: 335.2, ys: [294.8, 283, 271.2], maxW: 39.6, size: 7, c: 1 },
       { key: "corrientes_salida", page: 0, x: 335.2, ys: [236, 224.2, 212.5], maxW: 39.6, size: 7, c: 1 },
       { key: "frecuencia", page: 0, x: 314, ys: [161.9, 150.1], maxW: 45, size: 8, c: 1 },
-      { key: "potencia_utilizada", page: 0, x: 186, ys: [121, 112.2], maxW: 54, size: 8, c: 1 },
+      { key: "potencia_utilizada", page: 0, x: 180, ys: [121, 109.2], maxW: 60, size: 8, c: 1 },
     ],
-    /* VAB/VBC/VCA y VAN/VBN/VCN de cada bloque de voltajes */
     slots: [
-      { key: "voltaje_entrada", page: 0, size: 6.5, at: [
-        [148.8, 294.8, 31], [148.8, 283, 31], [148.8, 271.2, 31],
-        [219, 294.8, 31], [219, 283, 31], [219, 271.2, 31]] },
-      { key: "voltaje_salida", page: 0, size: 6.5, at: [
-        [148.8, 236, 31], [148.8, 224.2, 31], [148.8, 212.5, 31],
-        [219, 236, 31], [219, 224.2, 31], [219, 212.5, 31]] },
-      { key: "voltaje_bypass", page: 0, size: 6.5, at: [
-        [148.8, 171.3, 31], [148.8, 159.5, 31], [148.8, 147.8, 31],
-        [219, 171.3, 31], [219, 159.5, 31], [219, 147.8, 31]] },
+      { key: "voltaje_entrada", page: 0, size: 6.5, at: [[148.8, 294.8, 31], [148.8, 283, 31], [148.8, 271.2, 31], [219, 294.8, 31], [219, 283, 31], [219, 271.2, 31]] },
+      { key: "voltaje_salida", page: 0, size: 6.5, at: [[148.8, 236, 31], [148.8, 224.2, 31], [148.8, 212.5, 31], [219, 236, 31], [219, 224.2, 31], [219, 212.5, 31]] },
+      { key: "voltaje_bypass", page: 0, size: 6.5, at: [[148.8, 171.3, 31], [148.8, 159.5, 31], [148.8, 147.8, 31], [219, 171.3, 31], [219, 159.5, 31], [219, 147.8, 31]] },
     ],
     wrap: [
       { key: "procedimiento", page: 0, x: 52, y0: 461.8, lh: 17.75, maxW: 528, size: 9, maxLines: 7 },
       { key: "diagnostico", page: 2, x: 52, y0: 293.2, lh: 16.55, maxW: 508, size: 9, maxLines: 5 },
+      { key: "detalles", page: 2, x: 339, y0: 614.8, lh: 12, maxW: 222, size: 7.5, maxLines: 5 },
     ],
     marks: [
-      { key: "tipo_servicio", page: 0, map: { "A - Diagnóstico": [[389.8, 716.2]], "B - Mantenimiento preventivo": [[389.8, 704.4]], "C - Mantenimiento correctivo": [[389.8, 692.5]], "D - Instalación": [[389.8, 680.9]] } },
-      { key: "tipo_servicio2", src: "tipo_servicio", page: 2, map: { "A - Diagnóstico": [[389.8, 735.5]], "B - Mantenimiento preventivo": [[389.8, 723.9]], "C - Mantenimiento correctivo": [[389.8, 712]], "D - Instalación": [[389.8, 700.3]] } },
-      { key: "estado_equipo_inicio", page: 0, map: { Energizado: [[247.4, 504.5]], Desenergizado: [[337.3, 504.5]] } },
-      { key: "condicion", page: 0, map: { "Garantía": [[398.6, 504.5]], Contrato: [[468.7, 504.5]], "Orden de trabajo": [[578.3, 504.5]] } },
-      { key: "voltajes_medidos", page: 0, map: { "Muy altos": [[578.3, 290.3]], Aceptables: [[578.3, 278.6]], "Muy bajos": [[578.3, 266.8]] } },
-      { key: "baterias_libres_mant", page: 0, map: { "Sí": [[424.9, 111]], No: [[451.2, 111]] } },
-      { key: "baterias_ubicacion", page: 0, map: { Externas: [[282.5, 545.5], [398.6, 93.4]], Internas: [[319.8, 545.5], [451.2, 93.4]], "Internas y externas": [[282.5, 545.5], [319.8, 545.5], [398.6, 93.4], [451.2, 93.4]] } },
+      { key: "tipo_servicio", page: 0, map: { "A - Diagnóstico": [[389.8, 716.2, 8.3, 11.3]], "B - Mantenimiento preventivo": [[389.8, 704.4, 8.3, 11.4]], "C - Mantenimiento correctivo": [[389.8, 692.5, 8.3, 11.5]], "D - Instalación": [[389.8, 680.9, 8.3, 11.3]] } },
+      /* La misma letra se repite en la fila «A B C D» de la página 1 */
+      { key: "tipo_servicio_abcd", src: "tipo_servicio", page: 0, map: {
+        "A - Diagnóstico": [[89.5, 503.6]], "B - Mantenimiento preventivo": [[115.8, 503.6]],
+        "C - Mantenimiento correctivo": [[142.1, 503.6]], "D - Instalación": [[168.3, 503.6]] } },
+      { key: "tipo_servicio2", src: "tipo_servicio", page: 2, map: { "A - Diagnóstico": [[389.8, 735.5, 8.3, 11.4]], "B - Mantenimiento preventivo": [[389.8, 723.9, 8.3, 11.3]], "C - Mantenimiento correctivo": [[389.8, 712, 8.3, 11.4]], "D - Instalación": [[389.8, 700.3, 8.3, 11.5]] } },
+      { key: "estado_equipo_inicio", page: 0, map: { Energizado: [[247.4, 504.5, 8.5, 11.5]], Desenergizado: [[337.3, 504.5, 8.4, 11.5]] } },
+      { key: "condicion", page: 0, map: { "Garantía": [[398.6, 504.5, 8.4, 11.5]], Contrato: [[468.7, 504.5, 8.3, 11.5]], "Orden de trabajo": [[578.3, 504.5, 8.5, 11.5]] } },
+      { key: "voltajes_medidos", page: 0, map: { "Muy altos": [[578.3, 290.3, 8.5, 5.6]], Aceptables: [[578.3, 278.6, 8.5, 5.5]], "Muy bajos": [[578.3, 266.8, 8.5, 5.5]] } },
+      { key: "baterias_libres_mant", page: 0, map: { "Sí": [[424.9, 111, 8.5, 11.3]], No: [[451.2, 111, 8.3, 11.3]] } },
+      { key: "baterias_ubicacion", page: 0, map: { Externas: [[282.5, 545.5, 8.4, 11.5], [398.6, 93.4, 8.4, 11.3]], Internas: [[319.8, 545.5, 8.4, 11.5], [451.2, 93.4, 8.3, 11.3]], "Internas y externas": [[282.5, 545.5, 8.4, 11.5], [319.8, 545.5, 8.4, 11.5], [398.6, 93.4, 8.4, 11.3], [451.2, 93.4, 8.3, 11.3]] } },
+      /* Trifásico / Bifásico / Monofásico de cada bloque de voltajes */
+      { key: "fase_entrada", page: 0, map: { "Trifásico": [[107.3, 296.3, 8.5, 5.5]], "Bifásico": [[107.3, 284.4, 8.5, 5.5]], "Monofásico": [[107.3, 272.6, 8.5, 5.6]] } },
+      { key: "fase_salida", page: 0, map: { "Trifásico": [[107.3, 237.4, 8.5, 5.5]], "Bifásico": [[107.3, 225.6, 8.5, 5.5]], "Monofásico": [[107.3, 213.9, 8.5, 5.5]] } },
+      { key: "fase_bypass", page: 0, map: { "Trifásico": [[107.3, 172.8, 8.5, 5.5]], "Bifásico": [[107.3, 160.9, 8.5, 5.5]], "Monofásico": [[107.3, 149.3, 8.5, 5.5]] } },
+      /* Voltaje de entrada nominal: dos columnas de tres casillas */
+      { key: "voltaje_nominal_ab", page: 0, map: { "480 VAC": [[442.4, 293.3, 8.5, 11.5]], "380 VAC": [[442.4, 281.5, 8.5, 11.3]], "240 VAC": [[442.4, 269.7, 8.5, 11.4]] } },
+      { key: "voltaje_nominal_an", page: 0, map: { "220 VAC": [[495, 293.3, 8.3, 11.5]], "208 VAC": [[495, 281.5, 8.3, 11.3]], "120 VAC": [[495, 269.7, 8.3, 11.4]] } },
+      /* Página de baterías: quién las instaló y dónde está cada banco */
+      { key: "baterias_instaladas", page: 1, map: { "Instaladas por DC": [[315.6, 667.1, 8.4, 11.3]], "Por otros": [[395.6, 667.1, 8.4, 11.3]] } },
+      { key: "banco1_ubicacion", page: 1, map: { Interno: [[120.3, 614.2, 8.4, 11.4]], Externo: [[164.7, 614.2, 8.6, 11.4]] } },
+      { key: "banco2_ubicacion", page: 1, map: { Interno: [[253.5, 614.2, 8.4, 11.4]], Externo: [[298, 614.2, 8.4, 11.4]] } },
+      { key: "banco3_ubicacion", page: 1, map: { Interno: [[386.7, 614.2, 8.6, 11.4]], Externo: [[431.1, 614.2, 8.4, 11.4]] } },
+      { key: "banco4_ubicacion", page: 1, map: { Interno: [[520, 614.2, 8.4, 11.4]], Externo: [[570.2, 614.2, 8.6, 11.4]] } },
     ],
     grid: [
-      { key: "chk_baterias", page: 0, rows: { reposicion_electrolitico: 122.7, gravedad_especifica: 111, voltaje_cada_bateria: 99.2 }, opts: { "Sí": 578.3 }, onlyYes: true },
-      { key: "chk_final", page: 0, rows: { equipo_en_linea: 111 }, opts: { "Sí": 311, No: 346.1 } },
-      { key: "chk_final_fs", src: "chk_final", page: 0, rows: { fuera_servicio: 93.4 }, opts: { "Sí": 337.3 }, onlyYes: true },
-      { key: "chk_inspeccion", page: 2, rows: { luces_displays: 632.5, extractores: 620.5, filtros_aire: 608.5, breakers: 596.5, ventilacion_cuarto: 584.5, aseo_cuarto: 572.5 }, opts: { Bien: 177.3, Mal: 203.6, Regular: 247.4, "N/A": 273.7, NAC: 300, NP: 328.5 } },
-      { key: "chk_riesgos", page: 2, rows: { material_metalico: 560.5, derrame_liquidos: 548.5, papeles_cuarto: 536.5, combustible_cuarto: 524.5, cuarto_deposito: 512.5 }, opts: { "Sí": 300, No: 328.5 } },
-      { key: "chk_revision", page: 2, rows: { limpieza_equipo: 458.5, limpieza_baterias: 446.5, soplado_interno: 434.5, sonido_inversor: 422.5, sonido_ventiladores: 410.5 }, opts: { "Sí": 256.2, No: 291.3 } },
-      { key: "chk_revision_der", src: "chk_revision", page: 2, rows: { revision_conectores: 458.5, retorqueo: 446.5, revision_tarjeteria: 434.5, sonidos_extranos: 422.5, cableado_bueno: 410.5 }, opts: { "Sí": 521.3, No: 556.3 } },
-      { key: "chk_final_p3", src: "chk_final", page: 2, rows: { reparado: 365.5, equipo_en_linea: 353.5 }, opts: { "Sí": 168.6, No: 194.8 } },
-      { key: "chk_final_p3b", src: "chk_final", page: 2, rows: { funcionando: 365.5, fuera_servicio: 353.5 }, opts: { "Sí": 354.8, No: 381.1 } },
-      { key: "chk_final_p3c", src: "chk_final", page: 2, rows: { se_puede_reparar: 365.5 }, opts: { "Sí": 521.3, No: 547.5 } },
+      { key: "chk_baterias", page: 0, rows: { reposicion_electrolitico: 122.7, gravedad_especifica: 111, voltaje_cada_bateria: 99.2 }, opts: { "Sí": 578.3 }, onlyYes: true, box: [8.5, 11.4] },
+      { key: "chk_final", page: 0, rows: { equipo_en_linea: 111 }, opts: { "Sí": 311, No: 346.1 }, box: [8.5, 11.3] },
+      { key: "chk_final_fs", src: "chk_final", page: 0, rows: { fuera_servicio: 93.4 }, opts: { "Sí": 337.3 }, onlyYes: true, box: [8.4, 11.3] },
+      { key: "chk_inspeccion", page: 2, rows: { luces_displays: 632.5, extractores: 620.5, filtros_aire: 608.5, breakers: 596.5, ventilacion_cuarto: 584.5, aseo_cuarto: 572.5 }, opts: { Bien: 177.3, Mal: 203.6, Regular: 247.4, "N/A": 273.7, NAC: 300, NP: 328.5 }, box: [8.3, 5.7] },
+      { key: "chk_riesgos", page: 2, rows: { material_metalico: 560.5, derrame_liquidos: 548.5, papeles_cuarto: 536.5, combustible_cuarto: 524.5, cuarto_deposito: 512.5 }, opts: { "Sí": 300, No: 328.5 }, box: [8.3, 5.7] },
+      { key: "chk_revision", page: 2, rows: { limpieza_equipo: 458.5, limpieza_baterias: 446.5, soplado_interno: 434.5, sonido_inversor: 422.5, sonido_ventiladores: 410.5 }, opts: { "Sí": 256.2, No: 291.3 }, box: [8.5, 5.7] },
+      { key: "chk_revision_der", src: "chk_revision", page: 2, rows: { revision_conectores: 458.5, retorqueo: 446.5, revision_tarjeteria: 434.5, sonidos_extranos: 422.5, cableado_bueno: 410.5 }, opts: { "Sí": 521.3, No: 556.3 }, box: [8.5, 5.7] },
+      { key: "chk_final_p3", src: "chk_final", page: 2, rows: { reparado: 365.5, equipo_en_linea: 353.5 }, opts: { "Sí": 168.6, No: 194.8 }, box: [8.5, 11.7] },
+      { key: "chk_final_p3b", src: "chk_final", page: 2, rows: { funcionando: 365.5, fuera_servicio: 353.5 }, opts: { "Sí": 354.8, No: 381.1 }, box: [8.5, 11.7] },
+      { key: "chk_final_p3c", src: "chk_final", page: 2, rows: { se_puede_reparar: 365.5 }, opts: { "Sí": 521.3, No: 547.5 }, box: [8.5, 11.7] },
     ],
-    baterias: { page: 1, xBanks: [98.8, 232, 365.2, 501.4], colW: 70.5, yTop: 582.1, step: 11.759, max: 40, size: 7, numero: { x: 428, y: 672, size: 7.5, maxW: 78, c: 1 }, bancoNoX: [71, 204, 337, 470], bancoNoY: 613 },
+    baterias: { page: 1, xBanks: [98.8, 232, 365.2, 501.4], colW: 70.5, yTop: 582.1, step: 11.76, max: 40, size: 7, numero: { x: 428, y: 672, size: 7.5, maxW: 78, c: 1 }, bancoNoX: [67, 200.1, 333.3, 466.5], bancoNoW: 18, bancoNoY: 611.3 },
     sigs: [
       { key: "firma", page: 2, x: 110, y: 125, h: 28, maxW: 130 },
       { key: "firma_tecnico", page: 2, x: 430, y: 141, h: 26, maxW: 120 },
@@ -164,7 +186,12 @@ const PLANTILLAS = {
       { key: "inventario", page: 0, x: 351, y: 603.2, size: 7, maxW: 116, c: 1 },
       { key: "breaker", page: 0, x: 457.2, y: 528.5, size: 7, maxW: 32.1, c: 1 },
       { key: "voltaje_baterias", page: 0, x: 141, y: 444.3, size: 8, maxW: 34, c: 1 },
+      { key: "mantenimiento_n", page: 0, x: 483.8, y: 614.7, size: 8, maxW: 12.5, c: 1 },
+      { key: "mantenimiento_de", page: 0, x: 526.3, y: 614.7, size: 8, maxW: 13, c: 1 },
+      { key: "hoja_n", page: 0, x: 501.3, y: 603.2, size: 8, maxW: 12.4, c: 1 },
+      { key: "hoja_de", page: 0, x: 534.8, y: 603.2, size: 8, maxW: 13.2, c: 1 },
       { key: "horometro", page: 1, x: 448, y: 425.7, size: 8, maxW: 106, c: 1 },
+      { key: "hora_medidas", page: 1, x: 430, y: 405.1, size: 8, maxW: 46, c: 1 },
       { key: "firma_nombre", page: 1, x: 142.8, y: 188.7, size: 8, maxW: 140.9, c: 1 },
       { key: "firma_cargo", page: 1, x: 82, y: 178, size: 8, maxW: 200, c: 1 },
       { key: "firma_telefono", page: 1, x: 95, y: 166.5, size: 8, maxW: 187, c: 1 },
@@ -175,15 +202,15 @@ const PLANTILLAS = {
       { key: "corrientes_salida", page: 0, x: 278.2, ys: [528.5, 516.9, 505.4], maxW: 40.6, size: 7, c: 1 },
       { key: "frecuencia", page: 0, x: 380, ys: [522.7, 505.4], maxW: 33, size: 8, c: 1 },
     ],
-    /* VAB/VBC/VCA y VAN/VBN/VCN del generador */
     slots: [
-      { key: "voltaje_salida", page: 0, size: 6.5, at: [
-        [150.3, 540, 23.4], [150.3, 522.7, 23.4], [150.3, 505.4, 23.4],
-        [218.7, 540, 23.5], [218.7, 522.7, 23.5], [218.7, 505.4, 23.5]] },
+      { key: "voltaje_salida", page: 0, size: 6.5, at: [[150.3, 540, 23.4], [150.3, 522.7, 23.4], [150.3, 505.4, 23.4], [218.7, 540, 23.5], [218.7, 522.7, 23.5], [218.7, 505.4, 23.5]] },
     ],
     wrap: [
       { key: "trabajo_realizado", page: 1, x: 50, y0: 371, lh: 13, maxW: 496, size: 9, maxLines: 5 },
       { key: "observaciones", page: 1, x: 50, y0: 273, lh: 13, maxW: 496, size: 9, maxLines: 5 },
+      /* Las dos cajas DETALLES de la página 1, al lado de cada checklist */
+      { key: "detalles_motor", page: 0, x: 365, y0: 391, lh: 11, maxW: 190, size: 7.5, maxLines: 10 },
+      { key: "detalles_sistema", page: 0, x: 365, y0: 229.5, lh: 11, maxW: 190, size: 7.5, maxLines: 12 },
     ],
     marks: [
       { key: "combustible", page: 0, map: { Gasolina: [[453.8, 629.4]], Diesel: [[507.7, 629.4]], Gas: [[542, 629.4]] } },
@@ -193,6 +220,8 @@ const PLANTILLAS = {
       { key: "cargador_externo", page: 0, map: { Bueno: [[348, 462.3]], Malo: [[345, 450.8]] } },
       { key: "medidores", page: 0, map: { Buenos: [[399, 468.1], [450.5, 468.1]], Malos: [[395, 456.5], [446.5, 456.5]], "No tiene": [[401, 445], [452, 445]] } },
       { key: "funcionamiento_previo", page: 1, map: { Correcto: [[216.5, 405.1]], Incorrecto: [[298.5, 405.1]], "No saben": [[369.7, 405.1]] } },
+      /* Estado final: SI / NO de «equipo en línea» y «fuera de servicio» */
+      { key: "estado_final", page: 0, map: { "En línea": [[70, 479.4]], "No está en línea": [[72, 467.9]], "Fuera de servicio": [[83, 447.5]] } },
     ],
     grid: [
       { key: "chk_motor", page: 0, rows: { presion_aceite: 404.7, filtro_aceite: 393.2, temperatura: 381.7, nivel_lubricante: 370.1, tension_correas: 358.6, nivel_combustible: 347.1, nivel_refrigerante: 335.6, drenaje_prefiltros: 324, motor_arranque: 289.5, alternador: 278 }, opts: { Bien: 188.5, Mal: 221.7, Regular: 268.6, "N/A": 294.3, NAC: 323.8, NP: 354.3 } },
@@ -201,7 +230,7 @@ const PLANTILLAS = {
       { key: "chk_sitio", page: 0, rows: { material_metalico: 139.7, liquidos_derramados: 128.2, papeles_sitio: 116.7, combustible_ok: 105.1, sitio_deposito: 93.6 }, opts: { "Sí": 322.9, No: 352 } },
       { key: "chk_limpieza", page: 1, rows: { limpieza_equipo: 629.7, limpieza_baterias: 618.2, sonido_ventiladores: 606.7, sonido_motor: 595.2, sonido_arranque: 583.7 }, opts: { "Sí": 251.1, No: 288.1 } },
       { key: "chk_limpieza_der", src: "chk_limpieza", page: 1, rows: { revision_conectores: 629.7, retorqueo: 618.2, revision_tarjeteria: 606.7 }, opts: { "Sí": 506.7, No: 543.7 } },
-      { key: "chk_tablero", page: 1, rows: { totalizador: 543.3, breaker_distribucion: 531.8 }, opts: { "Sí": 251.1, No: 288.1 } },
+      { key: "chk_tablero", page: 1, rows: { totalizador: 543.3, breaker_distribucion: 531.8, transferencia_automatica: 520.4, transferencia_manual: 508.9 }, opts: { "Sí": 251.1, No: 288.1 } },
     ],
     pruebas: { page: 1, arranque_planta: { y: 468.4, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_manual: { y: 456.9, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_automatica: { y: 468.4, si: 427, no: 464.5, bien: 503, mal: 544 } },
     bateriasChk: { page: 0, libres: { si: [121, 462.3], no: [166, 462.3] }, simple: { reposicion_electrolitico: [296, 491.1], gravedad_especifica: [296, 479.6], voltaje_cada_bateria: [296, 468.1], bornes_buenos: [296, 458.6], bornes_sulfatados: [296, 447.1] } },
@@ -214,7 +243,6 @@ const PLANTILLAS = {
   /* ===== MANTENIMIENTO A.A (carta, 1 pág) ===== */
   aire: {
     file: "REPORTE TECNICO - A.A - DISTRI.pdf",
-    /* Esta plantilla es una tabla: cada dato va centrado en su celda. */
     numero: [
       { page: 0, x: 430.2, y: 706.1, size: 9, maxW: 152.7, c: 1 },
     ],
@@ -248,13 +276,13 @@ const PLANTILLAS = {
       { key: "pendientes", page: 0, x: 332, y0: 200.7, lh: 11, maxW: 250, size: 8, maxLines: 4 },
     ],
     marks: [
-      { key: "trabajo", page: 0, map: { "Garantía": [[470.1, 645.5]], "Mantenimiento preventivo": [[470.1, 627.6]], "Mantenimiento correctivo": [[470.1, 606.2]], "Instalación": [[470.1, 584.9]] } },
+      { key: "trabajo", page: 0, map: { "Garantía": [[470.1, 645.5, 15.5, 14.2]], "Mantenimiento preventivo": [[470.1, 627.6]], "Mantenimiento correctivo": [[470.1, 606.2]], "Instalación": [[470.1, 584.9]] } },
       { key: "tipo_servicio", page: 0, map: { Laboratorio: [[576, 634.7]], Visita: [[576, 595.5]] } },
-      { key: "tipo_equipo", page: 0, map: { "Mini Split": [[470.3, 567.4]], "Piso Techo": [[470.3, 553.1]], Cassete: [[470.3, 538.8]], Paquete: [[470.3, 524.4]], Ventana: [[576, 567.4]], "Split Central": [[576, 553.1]], "Portátil": [[576, 538.8]], "Precisión": [[576, 524.4]] } },
+      { key: "tipo_equipo", page: 0, map: { "Mini Split": [[470.3, 567.4, 15.5, 14.2]], "Piso Techo": [[470.3, 553.1, 15.5, 14.2]], Cassete: [[470.3, 538.8, 15.5, 14.2]], Paquete: [[470.3, 524.4, 15.5, 14.2]], Ventana: [[576, 567.4, 17.7, 14.2]], "Split Central": [[576, 553.1, 17.7, 14.2]], "Portátil": [[576, 538.8, 17.7, 14.2]], "Precisión": [[576, 524.4, 17.7, 14.2]] } },
     ],
     grid: [
-      { key: "chk_verificacion", page: 0, rows: { funcionamiento: 453.2, carga_refrigerante: 432, serpentin_condensador: 410.6, serpentin_manejadora: 389.2, filtros_aire: 367.8, ventilador_condensador: 346.4, ventilador_manejadora: 324.9, bomba_condensado: 303.6 }, opts: { Bueno: 420.4, Regular: 436.6, Malo: 453.8 } },
-      { key: "chk_verificacion_der", src: "chk_verificacion", page: 0, rows: { revision_escapes: 432, aislamiento: 410.6, soportes: 389.2, breakers: 346.4, contactores: 324.9, cableado: 303.6 }, opts: { Bueno: 538.4, Regular: 557.6, Malo: 576.2 } },
+      { key: "chk_verificacion", page: 0, rows: { funcionamiento: 453.2, carga_refrigerante: 432, serpentin_condensador: 410.6, serpentin_manejadora: 389.2, filtros_aire: 367.8, ventilador_condensador: 346.4, ventilador_manejadora: 324.9, bomba_condensado: 303.6 }, opts: { Bueno: 420.4, Regular: 436.6, Malo: 453.8 } , box: [10.5, 9.5], hl: 1 },
+      { key: "chk_verificacion_der", src: "chk_verificacion", page: 0, rows: { revision_escapes: 432, aislamiento: 410.6, soportes: 389.2, breakers: 346.4, contactores: 324.9, cableado: 303.6 }, opts: { Bueno: 538.4, Regular: 557.6, Malo: 576.2 } , box: [10.5, 9.5], hl: 1 },
     ],
     sigs: [
       { key: "firma_tecnico", page: 0, cx: 238, y: 110, h: 17, maxW: 150 },
@@ -286,13 +314,12 @@ const PLANTILLAS = {
       { key: "diagnostico", page: 0, x: 49, y0: 300.4, lh: 16.3, maxW: 504, size: 8.5, maxLines: 5 },
     ],
     marks: [
-      /* IP y ANL vienen rotulados dentro del recuadro: la X va al lado */
       { key: "tecnologia", page: 0, map: { IP: [[496.5, 610.9]], "Análoga": [[526.5, 610.9]] } },
-      { key: "tipo_camara", page: 0, map: { "Domo PTZ": [[469.9, 583.6]], "Fija bala": [[469.8, 568.9]], "Fija mini domo": [[469.9, 552.6]], "Fija con housing": [[470.2, 535.4]], "Fija 360°": [[470.5, 518.1]] } },
+      { key: "tipo_camara", page: 0, map: { "Domo PTZ": [[469.9, 583.6, 9.8, 8.2]], "Fija bala": [[469.8, 568.9, 9.9, 8.3]], "Fija mini domo": [[469.9, 552.6, 9.8, 8.3]], "Fija con housing": [[470.2, 535.4, 9.9, 8.2]], "Fija 360°": [[470.5, 518.1, 9.8, 8.3]] } },
     ],
     grid: [
-      { key: "chk_componentes", page: 0, rows: { estado_fisico: 467, acrilico: 457.3, fuente_dc: 446.3, balums: 434.5, cableado: 422.8, voltaje_alimentacion: 411, dvr_nvr: 398.6 }, opts: { Bien: 176.1, Mal: 201.6, Regular: 244.2, "N/A": 269.7, NAC: 295.4, NP: 323.1 } },
-      { key: "chk_tareas", page: 0, rows: { ajuste_conectores: 386.3, limpieza_equipo: 374.5, limpieza_lente: 362.8, camara_operativa: 350.9 }, opts: { "Sí": 176.1, No: 201.6 } },
+      { key: "chk_componentes", page: 0, rows: { estado_fisico: 467, acrilico: 457.3, fuente_dc: 446.3, balums: 434.5, cableado: 422.8, voltaje_alimentacion: 411, dvr_nvr: 398.6 }, opts: { Bien: 176.1, Mal: 201.6, Regular: 244.2, "N/A": 269.7, NAC: 295.4, NP: 323.1 }, box: [8.2, 5.5] },
+      { key: "chk_tareas", page: 0, rows: { ajuste_conectores: 386.3, limpieza_equipo: 374.5, limpieza_lente: 362.8, camara_operativa: 350.9 }, opts: { "Sí": 176.1, No: 201.6 }, box: [8.2, 5.5] },
     ],
     sigs: [
       { key: "firma", page: 0, x: 110, y: 139, h: 28, maxW: 130 },

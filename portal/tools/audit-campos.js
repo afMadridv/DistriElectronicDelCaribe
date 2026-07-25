@@ -33,7 +33,7 @@ for (const key of Object.keys(FORMATS)) {
   /* claves que la plantilla imprime */
   const pdfKeys = new Set();
   (plantilla.text || []).forEach((t) => {
-    pdfKeys.add(t.key);
+    pdfKeys.add(t.src || t.key);
     (t.join || []).forEach((k) => pdfKeys.add(k));
   });
   (plantilla.wrap || []).forEach((w) => pdfKeys.add(w.key));

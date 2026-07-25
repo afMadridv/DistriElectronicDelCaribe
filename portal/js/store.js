@@ -268,13 +268,20 @@
     },
 
     /* Copia del registro con las imágenes ya firmadas, lista para el PDF.
-       El registro original conserva las rutas, que es lo que se guarda. */
+       El registro original conserva las rutas, que es lo que se guarda.
+       Acepta tanto la ruta suelta como { src, desc } del registro fotográfico. */
     async hydrateImages(record) {
       const data = { ...record.data };
       for (const key of Object.keys(data)) {
-        if (!Array.isArray(data[key]) || !data[key].length) continue;
-        if (!data[key].every((v) => typeof v === "string")) continue;
-        data[key] = await Promise.all(data[key].map((v) => this.imageUrl(v)));
+        const arr = data[key];
+        if (!Array.isArray(arr) || !arr.length) continue;
+        const esFoto = (v) => typeof v === "string"
+          || (v && typeof v === "object" && typeof v.src === "string");
+        if (!arr.every(esFoto)) continue;
+        data[key] = await Promise.all(arr.map(async (v) =>
+          typeof v === "string"
+            ? await this.imageUrl(v)
+            : { ...v, src: await this.imageUrl(v.src) }));
       }
       return { ...record, data };
     },
@@ -286,7 +293,8 @@
       const rutas = [];
       for (const val of Object.values(record.data || {})) {
         if (!Array.isArray(val)) continue;
-        for (const v of val) {
+        for (const item of val) {
+          const v = (item && typeof item === "object") ? item.src : item;
           if (typeof v === "string" && !v.startsWith("data:") && !v.startsWith("http") && v.includes("/")) {
             rutas.push(v);
           }
