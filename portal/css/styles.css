@@ -473,3 +473,10 @@ body {
   .format-grid { grid-template-columns: 1fr; }
   .brand-text small { display: none; }
 }
+
+/* Aviso de la vista previa (Chrome de Android no muestra PDF en iframe) */
+.preview-aviso {
+  margin: 0; padding: 10px 14px;
+  background: #fff8e1; border-bottom: 1px solid var(--gray-200, #eee);
+  font-size: 13px; color: #7a5c00;
+}

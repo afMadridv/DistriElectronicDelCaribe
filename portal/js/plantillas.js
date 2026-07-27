@@ -66,13 +66,6 @@ const PLANTILLAS = {
       { key: "codigo", page: 0, x: 370.2, y: 611.8, size: 8, maxW: 39.8, c: 1 },
       { key: "mantenimiento_n", page: 0, x: 391, y: 559, size: 8, maxW: 16, c: 1 },
       { key: "mantenimiento_de", page: 0, x: 434.5, y: 559, size: 8, maxW: 16, c: 1 },
-      { key: "hoja_n", page: 0, x: 486, y: 559, size: 8, maxW: 16, c: 1 },
-      { key: "hoja_de", page: 0, x: 529.5, y: 559, size: 8, maxW: 16, c: 1 },
-      /* La HOJA se repite en las páginas 2 y 3 */
-      { key: "hoja_n2", src: "hoja_n", page: 1, x: 527, y: 637, size: 8, maxW: 16, c: 1 },
-      { key: "hoja_de2", src: "hoja_de", page: 1, x: 556, y: 637, size: 8, maxW: 20, c: 1 },
-      { key: "hoja_n3", src: "hoja_n", page: 2, x: 422, y: 748.9, size: 8, maxW: 23, c: 1 },
-      { key: "hoja_de3", src: "hoja_de", page: 2, x: 474, y: 748.9, size: 8, maxW: 15, c: 1 },
       { key: "hora_medidas", page: 0, x: 435, y: 316.8, size: 8, maxW: 90, c: 1 },
       { key: "oficina", page: 0, x: 87.7, y: 594.2, size: 8, maxW: 92.1, c: 1 },
       { key: "lugar", page: 0, x: 219, y: 594.2, size: 8, maxW: 93.8, c: 1 },
@@ -99,6 +92,11 @@ const PLANTILLAS = {
       { key: "firma_telefono", page: 2, x: 114.5, y: 175, size: 8, maxW: 135.5, c: 1 },
       { key: "firma_email", page: 2, x: 96.3, y: 163, size: 8, maxW: 153.7, c: 1 },
       { key: "tecnico", page: 2, x: 396.8, y: 121, size: 8, maxW: 152.9, c: 1 },
+    ],
+    hojas: [
+      { page: 0, n: 1, xn: 486, xt: 529.5, y: 559, w: 16 },
+      { page: 1, n: 2, xn: 527, xt: 556, y: 637, w: 16 },
+      { page: 2, n: 3, xn: 422, xt: 474, y: 748.9, w: 20 },
     ],
     triple: [
       { key: "corrientes_entrada", page: 0, x: 335.2, ys: [294.8, 283, 271.2], maxW: 39.6, size: 7, c: 1 },
@@ -188,8 +186,6 @@ const PLANTILLAS = {
       { key: "voltaje_baterias", page: 0, x: 141, y: 444.3, size: 8, maxW: 34, c: 1 },
       { key: "mantenimiento_n", page: 0, x: 483.8, y: 614.7, size: 8, maxW: 12.5, c: 1 },
       { key: "mantenimiento_de", page: 0, x: 526.3, y: 614.7, size: 8, maxW: 13, c: 1 },
-      { key: "hoja_n", page: 0, x: 501.3, y: 603.2, size: 8, maxW: 12.4, c: 1 },
-      { key: "hoja_de", page: 0, x: 534.8, y: 603.2, size: 8, maxW: 13.2, c: 1 },
       { key: "horometro", page: 1, x: 448, y: 425.7, size: 8, maxW: 106, c: 1 },
       { key: "hora_medidas", page: 1, x: 430, y: 405.1, size: 8, maxW: 46, c: 1 },
       { key: "firma_nombre", page: 1, x: 142.8, y: 188.7, size: 8, maxW: 140.9, c: 1 },
@@ -197,6 +193,9 @@ const PLANTILLAS = {
       { key: "firma_telefono", page: 1, x: 95, y: 166.5, size: 8, maxW: 187, c: 1 },
       { key: "firma_email", page: 1, x: 82, y: 154.9, size: 8, maxW: 200, c: 1 },
       { key: "tecnico", page: 1, x: 304.5, y: 90.8, size: 8, maxW: 243.8, c: 1 },
+    ],
+    hojas: [
+      { page: 0, n: 1, xn: 501.3, xt: 534.8, y: 603.2, w: 13 },
     ],
     triple: [
       { key: "corrientes_salida", page: 0, x: 278.2, ys: [528.5, 516.9, 505.4], maxW: 40.6, size: 7, c: 1 },
@@ -231,6 +230,9 @@ const PLANTILLAS = {
       { key: "chk_limpieza", page: 1, rows: { limpieza_equipo: 629.7, limpieza_baterias: 618.2, sonido_ventiladores: 606.7, sonido_motor: 595.2, sonido_arranque: 583.7 }, opts: { "Sí": 251.1, No: 288.1 } },
       { key: "chk_limpieza_der", src: "chk_limpieza", page: 1, rows: { revision_conectores: 629.7, retorqueo: 618.2, revision_tarjeteria: 606.7 }, opts: { "Sí": 506.7, No: 543.7 } },
       { key: "chk_tablero", page: 1, rows: { totalizador: 543.3, breaker_distribucion: 531.8, transferencia_automatica: 520.4, transferencia_manual: 508.9 }, opts: { "Sí": 251.1, No: 288.1 } },
+      /* La columna derecha del tablero repite cuatro filas de la revisión
+         general: se marcan con lo que ya se respondió allí. */
+      { key: "chk_tablero_der", src: "chk_limpieza", page: 1, rows: { limpieza_equipo: 543.3, limpieza_baterias: 531.8, sonido_ventiladores: 520.4, sonido_motor: 508.9 }, opts: { "Sí": 502.5, No: 538.5 } },
     ],
     pruebas: { page: 1, arranque_planta: { y: 468.4, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_manual: { y: 456.9, si: 172, no: 209, bien: 248, mal: 289 }, transferencia_automatica: { y: 468.4, si: 427, no: 464.5, bien: 503, mal: 544 } },
     bateriasChk: { page: 0, libres: { si: [121, 462.3], no: [166, 462.3] }, simple: { reposicion_electrolitico: [296, 491.1], gravedad_especifica: [296, 479.6], voltaje_cada_bateria: [296, 468.1], bornes_buenos: [296, 458.6], bornes_sulfatados: [296, 447.1] } },

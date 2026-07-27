@@ -62,6 +62,15 @@ function igual(mapa, valor) {
   return Object.keys(mapa).find((op) => clave(op) === k);
 }
 
+/* Parte un valor de varias medidas. Acepta «/», «-», «;» o coma como
+   separador, porque en campo se escribe de las cuatro formas. */
+function partir(val) {
+  return String(val ?? "")
+    .split(/[/;,]|\s-\s|(?<=\d)-(?=\d)/)
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
 function wrapText(font, text, size, maxW) {
   const words = String(text ?? "").replace(/\r/g, "").split(/\s+|\n/);
   const paras = String(text ?? "").replace(/\r/g, "").split("\n");
@@ -198,7 +207,7 @@ async function build(formatKey, record, opts = {}) {
   for (const tr of cfg.triple || []) {
     const val = data[tr.key];
     if (!val) continue;
-    const parts = String(val).split("/").map((s) => s.trim());
+    const parts = partir(val);
     tr.ys.forEach((y, i) => {
       if (parts[i]) drawText(P(tr.page), parts[i], tr.x, y, tr.size || 7, tr.maxW, false, tr.c);
     });
@@ -208,7 +217,7 @@ async function build(formatKey, record, opts = {}) {
   for (const sl of cfg.slots || []) {
     const val = data[sl.key];
     if (!val) continue;
-    const parts = String(val).split("/").map((s) => s.trim());
+    const parts = partir(val);
     sl.at.forEach(([x, y, w], i) => {
       if (parts[i]) drawText(P(sl.page), parts[i], x, y, sl.size || 7, w, false, true);
     });
@@ -224,14 +233,27 @@ async function build(formatKey, record, opts = {}) {
     });
   }
 
-  /* tablas de ítems */
+  /* Tablas de ítems. Una descripción larga ocupa varias filas de la tabla
+     con la letra del mismo tamaño, en vez de encogerse hasta caber en una:
+     el número del ítem se escribe solo en la primera fila, así una misma
+     idea no gasta varios números. */
   for (const it of cfg.items || []) {
-    const rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim()).slice(0, it.max);
-    rows.forEach((r, i) => {
-      const y = it.y0 - i * it.step;
-      drawText(P(it.page), String(r.cant ?? ""), it.cantX, y, it.size || 8, it.cantW || 35, false, true);
-      drawText(P(it.page), r.descripcion, it.descX, y, it.size || 8, it.descMaxW);
-    });
+    const rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim());
+    const size = it.size || 8;
+    let fila = 0;
+    for (const r of rows) {
+      if (fila >= it.max) break;
+      const lineas = wrapText(font, r.descripcion, size, it.descMaxW)
+        .slice(0, it.max - fila);
+      lineas.forEach((linea, n) => {
+        const y = it.y0 - (fila + n) * it.step;
+        if (n === 0) {
+          drawText(P(it.page), String(r.cant ?? ""), it.cantX, y, size, it.cantW || 35, false, true);
+        }
+        drawText(P(it.page), linea, it.descX, y, size, it.descMaxW);
+      });
+      fila += lineas.length;
+    }
   }
 
   /* marcas X — [x, y] o [x, y, ancho, alto] de la casilla.
@@ -429,19 +451,37 @@ async function build(formatKey, record, opts = {}) {
     }
   }
 
+  /* «HOJA _ DE _»: el total se cuenta al final, cuando ya se sabe cuántas
+     paginas de fotos se agregaron, y se escribe en cada sitio donde la
+     plantilla lo pide. El numero de hoja es el de la pagina donde va. */
+  if (cfg.hojas) {
+    const total = String(doc.getPageCount());
+    for (const h of cfg.hojas) {
+      drawText(P(h.page), String(h.n), h.xn, h.y, h.size || 8, h.w || 16, false, true);
+      drawText(P(h.page), total, h.xt, h.y, h.size || 8, h.w || 16, false, true);
+    }
+  }
+
   return doc;
 }
 
 const PDFGen = {
   build,
-  async download(formatKey, record) {
+  async download(formatKey, record, nombreArchivo) {
     const doc = await build(formatKey, record);
     const bytes = await doc.save();
     const blob = new Blob([bytes], { type: "application/pdf" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const name = (PLANTILLAS[formatKey].file || "documento.pdf").replace(/\.pdf$/i, "");
-    a.download = `${name} - ${record.numero || ""}.pdf`;
+    const propuesto = `${name} - ${record.numero || ""}`;
+    /* El nombre lo puede elegir quien descarga; se limpian los caracteres
+       que Windows no admite en un nombre de archivo. */
+    const elegido = String(nombreArchivo || propuesto)
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, "-")
+      .replace(/\.pdf$/i, "");
+    a.download = (elegido || propuesto) + ".pdf";
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   },

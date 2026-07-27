@@ -588,18 +588,42 @@
     formDirty = true;
   }
 
+  /* Chrome de Android no trae visor de PDF dentro de un iframe: la vista
+     previa salía en blanco en el celular. Ahí se abre en otra pestaña. */
+  const sinVisorPDF = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  let urlPreview = null;
+
   async function refreshPreview() {
     if (!currentFormat) return;
     $("#preview-panel").classList.remove("hidden");
+    const aviso = $("#preview-aviso");
     try {
       const record = await Store.hydrateImages({
         numero: editingRecord ? editingRecord.numero : `${FORMATS[currentFormat].prefix}-BORRADOR`,
         data: collectData(),
       });
-      const url = await PDFGen.previewDataURL(currentFormat, record);
-      $("#pdf-preview").src = url;
-    } catch (e) { console.error("preview:", e); }
+      urlPreview = await PDFGen.previewDataURL(currentFormat, record);
+      $("#open-preview").classList.remove("hidden");
+      if (sinVisorPDF) {
+        $("#pdf-preview").classList.add("hidden");
+        aviso.textContent = "Tu navegador no muestra el PDF aquí dentro. Pulsa «Abrir en otra pestaña».";
+        aviso.classList.remove("hidden");
+        window.open(urlPreview, "_blank");
+      } else {
+        $("#pdf-preview").classList.remove("hidden");
+        $("#pdf-preview").src = urlPreview;
+        aviso.classList.add("hidden");
+      }
+    } catch (e) {
+      console.error("preview:", e);
+      aviso.textContent = "No se pudo generar la vista previa: " + (e.message || "");
+      aviso.classList.remove("hidden");
+      toast("No se pudo generar la vista previa.", "error");
+    }
   }
+  $("#open-preview").addEventListener("click", () => {
+    if (urlPreview) window.open(urlPreview, "_blank");
+  });
   $("#refresh-preview").addEventListener("click", refreshPreview);
 
   $("#preview-btn").addEventListener("click", async (e) => {
@@ -612,6 +636,14 @@
   });
 
   $("#generate-btn").addEventListener("click", () => saveCotizacion(true));
+
+  /* Antes de descargar se propone un nombre y se deja cambiarlo. */
+  function pedirNombre(formatKey, record) {
+    const base = `${FORMATS[formatKey].name} - ${record.numero || ""}`.trim();
+    const r = window.prompt("Nombre del archivo PDF:", base);
+    if (r === null) return base;          // cancelar = deja el nombre propuesto
+    return r.trim() || base;
+  }
 
   /* guarda la cotización; download=false para "guardar y salir" */
   async function saveCotizacion(download = true) {
@@ -657,7 +689,10 @@
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
       }
 
-      if (download) await PDFGen.download(currentFormat, await Store.hydrateImages(record));
+      if (download) {
+        const rec = await Store.hydrateImages(record);
+        await PDFGen.download(currentFormat, rec, pedirNombre(currentFormat, rec));
+      }
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
       toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
@@ -736,7 +771,8 @@
         e.target.disabled = true;
         try {
           const rec = await Store.getCotizacion(id);
-          await PDFGen.download(rec.format_type, await Store.hydrateImages(rec));
+          const listo = await Store.hydrateImages(rec);
+          await PDFGen.download(rec.format_type, listo, pedirNombre(rec.format_type, listo));
         } catch (ex) {
           toast(ex.message || "No se pudo generar el PDF.", "error");
         } finally { e.target.disabled = false; }

@@ -110,8 +110,12 @@
             <div class="preview-panel hidden" id="preview-panel">
               <div class="preview-head">
                 <span>Vista previa</span>
-                <button class="btn btn-ghost btn-sm" id="refresh-preview">Actualizar</button>
+                <div>
+                  <button class="btn btn-ghost btn-sm hidden" id="open-preview">Abrir en otra pestaña</button>
+                  <button class="btn btn-ghost btn-sm" id="refresh-preview">Actualizar</button>
+                </div>
               </div>
+              <p id="preview-aviso" class="preview-aviso hidden"></p>
               <iframe id="pdf-preview" title="Vista previa del PDF"></iframe>
             </div>
           </div>
