@@ -266,7 +266,7 @@ async function build(formatKey, record, opts = {}) {
     const pts = m.map[val] || m.map[igual(m.map, val)];
     if (!pts) continue;
     for (const [x, y, bw, bh] of pts) {
-      drawX(P(m.page), x, y, 8, bw ? [bw, bh] : null);
+      drawX(P(m.page), x, y, 8, bw ? [bw, bh] : null, m.hl);
     }
   }
 
@@ -291,11 +291,12 @@ async function build(formatKey, record, opts = {}) {
       const val = obj[key];
       if (!val) continue;
       const page = P(cfg.pruebas.page);
+      const hl = cfg.pruebas.hl;
       if (val.startsWith("Sí")) {
-        drawX(page, pos.si, pos.y, 7.5, caja);
-        if (val.includes("Bien")) drawX(page, pos.bien, pos.y, 7.5, caja);
-        if (val.includes("Mal")) drawX(page, pos.mal, pos.y, 7.5, caja);
-      } else if (val === "No") drawX(page, pos.no, pos.y, 7.5, caja);
+        drawX(page, pos.si, pos.y, 7.5, caja, hl);
+        if (val.includes("Bien")) drawX(page, pos.bien, pos.y, 7.5, caja, hl);
+        if (val.includes("Mal")) drawX(page, pos.mal, pos.y, 7.5, caja, hl);
+      } else if (val === "No") drawX(page, pos.no, pos.y, 7.5, caja, hl);
     }
   }
 
@@ -303,11 +304,13 @@ async function build(formatKey, record, opts = {}) {
   if (cfg.bateriasChk) {
     const obj = data.chk_baterias || {};
     const page = P(cfg.bateriasChk.page);
+    /* «Libres de mantenimiento» tiene las palabras SI/NO impresas: se
+       resaltan. Las demás filas no traen palabra, así que llevan la X. */
     const caja = cfg.bateriasChk.box;
-    if (obj.libres_mantenimiento === "Sí") drawX(page, ...cfg.bateriasChk.libres.si, 7.5, caja);
-    if (obj.libres_mantenimiento === "No") drawX(page, ...cfg.bateriasChk.libres.no, 7.5, caja);
+    if (obj.libres_mantenimiento === "Sí") drawX(page, ...cfg.bateriasChk.libres.si, 7.5, caja, true);
+    if (obj.libres_mantenimiento === "No") drawX(page, ...cfg.bateriasChk.libres.no, 7.5, caja, true);
     for (const [key, pos] of Object.entries(cfg.bateriasChk.simple)) {
-      if (obj[key] === "Sí") drawX(page, pos[0], pos[1], 7.5, caja);
+      if (obj[key] === "Sí") drawX(page, pos[0], pos[1], 7.5);
     }
   }
 
