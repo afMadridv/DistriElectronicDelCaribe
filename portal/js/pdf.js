@@ -17,6 +17,16 @@ const MARCA_X = rgb(0.00, 0.42, 0.75);  // azul de la X donde no hay recuadro
 
 const templateCache = {};
 
+/* Ruta del logo de la empresa. En el navegador se sirve desde el sitio;
+   en Node (pruebas) se lee del disco. */
+function logoURL() {
+  if (!isNode) return "img/logo.png";
+  try {
+    const p = require("path").join(__dirname, "..", "img", "logo.png");
+    return "data:image/png;base64," + require("fs").readFileSync(p).toString("base64");
+  } catch { return null; }
+}
+
 async function fetchTemplate(file, baseUrl) {
   if (templateCache[file]) return templateCache[file];
   let bytes;
@@ -376,11 +386,20 @@ async function build(formatKey, record, opts = {}) {
     const TOP = 726;                                // borde superior de la rejilla
     const GRIS = rgb(0.25, 0.25, 0.25);
 
+    /* El logo se carga y se incrusta UNA sola vez para todas las hojas
+       de fotos; las hojas de la plantilla ya lo traen impreso. */
+    const logo = await embedImg(doc, opts.logo || logoURL());
+
     for (let p = 0; p < fotos.length; p += PORPAG) {
       const page = doc.addPage([612, 792]);
       const numero = record.numero || "";
 
-      /* encabezado */
+      /* encabezado: logo arriba a la izquierda, como en la plantilla */
+      if (logo) {
+        const alto = 42;
+        const ancho = logo.width * (alto / logo.height);
+        page.drawImage(logo, { x: MX, y: 748 - alto / 2, width: ancho, height: alto });
+      }
       const titulo = "REGISTRO FOTOGRÁFICO";
       page.drawText(titulo, {
         x: (612 - bold.widthOfTextAtSize(titulo, 13)) / 2,
