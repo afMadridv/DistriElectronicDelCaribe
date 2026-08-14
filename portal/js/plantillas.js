@@ -179,9 +179,11 @@ const PLANTILLAS = {
       { key: "gen_marca", page: 0, x: 134.3, y: 614.7, size: 8, maxW: 72.7, c: 1 },
       { key: "gen_modelo", page: 0, x: 245.2, y: 614.7, size: 8, maxW: 55.6, c: 1 },
       { key: "gen_potencia", page: 0, x: 356, y: 614.7, size: 8, maxW: 38.5, c: 1 },
+      /* la casilla corta antes de «BATERÍA(S)» es la cantidad; la referencia
+         va en la línea larga que sigue a «REFERENCIA(S):» */
+      { key: "baterias_cantidad", page: 0, x: 55.7, y: 603.2, size: 7, maxW: 17.1, c: 1 },
       { key: "baterias_ref", page: 0, x: 167.5, y: 603.2, size: 8, maxW: 70, c: 1 },
       { key: "serie", page: 0, x: 284, y: 603.2, size: 7, maxW: 27, c: 1 },
-      { key: "inventario", page: 0, x: 351, y: 603.2, size: 7, maxW: 116, c: 1 },
       { key: "breaker", page: 0, x: 457.2, y: 528.5, size: 7, maxW: 32.1, c: 1 },
       { key: "voltaje_baterias", page: 0, x: 141, y: 444.3, size: 8, maxW: 34, c: 1 },
       { key: "mantenimiento_n", page: 0, x: 483.8, y: 614.7, size: 8, maxW: 12.5, c: 1 },

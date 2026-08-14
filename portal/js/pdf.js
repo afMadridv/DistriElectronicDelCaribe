@@ -168,6 +168,20 @@ async function build(formatKey, record, opts = {}) {
      lado de la palabra) va solo la X, en color.
      0.717 es la altura de mayúscula de Helvetica-Bold: restar 0.3585*size
      deja la X centrada en el punto. */
+  /* Casilla dibujada por nosotros: la plantilla no trae recuadro impreso,
+     así que se traza el cuadro vacío y la X va dentro. */
+  const drawBoxX = (page, x, y, lado = 8) => {
+    page.drawRectangle({
+      x: x - lado / 2, y: y - lado / 2, width: lado, height: lado,
+      borderColor: INK, borderWidth: 0.7,
+    });
+    const size = lado * 0.78;
+    page.drawText("X", {
+      x: x - bold.widthOfTextAtSize("X", size) / 2,
+      y: y - size * 0.3585,
+      size, font: bold, color: INK,
+    });
+  };
   const drawX = (page, x, y, size = 8, box = null, soloColor = false) => {
     if (box) {
       const [bw, bh] = box;
@@ -315,12 +329,13 @@ async function build(formatKey, record, opts = {}) {
     const obj = data.chk_baterias || {};
     const page = P(cfg.bateriasChk.page);
     /* «Libres de mantenimiento» tiene las palabras SI/NO impresas: se
-       resaltan. Las demás filas no traen palabra, así que llevan la X. */
+       resaltan. Las demás filas no traen palabra ni recuadro impreso, así
+       que se les dibuja la casilla con la X dentro. */
     const caja = cfg.bateriasChk.box;
     if (obj.libres_mantenimiento === "Sí") drawX(page, ...cfg.bateriasChk.libres.si, 7.5, caja, true);
     if (obj.libres_mantenimiento === "No") drawX(page, ...cfg.bateriasChk.libres.no, 7.5, caja, true);
     for (const [key, pos] of Object.entries(cfg.bateriasChk.simple)) {
-      if (obj[key] === "Sí") drawX(page, pos[0], pos[1], 7.5);
+      if (obj[key] === "Sí") drawBoxX(page, pos[0], pos[1], cfg.bateriasChk.lado || 8);
     }
   }
 

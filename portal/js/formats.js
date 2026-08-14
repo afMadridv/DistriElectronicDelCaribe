@@ -228,7 +228,7 @@ window.FORMATS = {
       { key: "gen_modelo", label: "Generador — Modelo", type: "text", half: true },
       { key: "gen_potencia", label: "Generador — Potencia", type: "text", half: true },
       { key: "serie", label: "No. de serie", type: "text", half: true },
-      { key: "inventario", label: "Inventario", type: "text", half: true },
+      { key: "baterias_cantidad", label: "N° de baterías", type: "text", half: true, placeholder: "Ej: 2" },
       { key: "baterias_ref", label: "Batería(s) — Referencia(s)", type: "text", half: true },
       { section: "Revisión eléctrica del generador" },
       { key: "voltaje_salida", label: "Voltaje de salida (VAB/VBC/VCA · VAN/VBN/VCN)", type: "text", half: true },
