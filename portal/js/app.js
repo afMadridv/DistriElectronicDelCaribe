@@ -346,6 +346,7 @@
           label.className = "field";
           label.innerHTML = `<span>${f.label}${f.required ? " *" : ""}</span>
             <input type="${f.type}" id="f-${f.key}" ${f.required ? "required" : ""}
+              ${f.calc ? "readonly tabindex='-1'" : ""}
               placeholder="${escapeHtml(f.placeholder || "")}" value="${escapeHtml(val || "")}" />`;
           container(f.half).appendChild(label);
           break;
@@ -391,6 +392,22 @@
           break;
         }
       }
+    }
+
+    /* campos calculados: se llenan solos a partir de otro campo
+       (celdas = baterías × 6). Si el origen no es un número, quedan vacíos. */
+    for (const f of format.fields) {
+      if (!f.calc) continue;
+      const destino = $(`#f-${f.key}`);
+      const origen = $(`#f-${f.calc.from}`);
+      if (!destino || !origen) continue;
+      const calcular = () => {
+        const n = parseFloat(String(origen.value).replace(",", "."));
+        destino.value = Number.isFinite(n) ? String(Math.round(n * f.calc.factor * 100) / 100) : "";
+      };
+      origen.addEventListener("input", calcular);
+      // al abrir un reporte guardado se recalcula con la regla vigente
+      if (origen.value.trim()) calcular();
     }
 
     // fecha por defecto hoy
@@ -888,7 +905,7 @@
 
   /* Antes de descargar se propone un nombre y se deja cambiarlo. */
   function pedirNombre(formatKey, record) {
-    const base = `${FORMATS[formatKey].name} - ${record.numero || ""}`.trim();
+    const base = `${FORMATS[formatKey].name} - ${PDFGen.numeroImpreso(formatKey, record) || record.numero || ""}`.trim();
     const r = window.prompt("Nombre del archivo PDF:", base);
     if (r === null) return base;          // cancelar = deja el nombre propuesto
     return r.trim() || base;
@@ -957,7 +974,8 @@
       }
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
-      toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
+      const num = PDFGen.numeroImpreso(currentFormat, record) || record.numero;
+      toast(download ? `PDF ${num} generado y guardado.` : `Cotización ${num} guardada.`);
       actualizarAlmacenamiento();
       return true;
     } catch (e) {
@@ -966,7 +984,7 @@
         // el registro sí quedó en el historial; solo falló el PDF
         formDirty = false;
         $("#save-status").textContent = "✓ Guardado en el historial";
-        toast(`${guardado.numero} se guardó, pero no se pudo generar el PDF: ${mensajeError(e)}`, "error");
+        toast(`${PDFGen.numeroImpreso(currentFormat, guardado) || guardado.numero} se guardó, pero no se pudo generar el PDF: ${mensajeError(e)}`, "error");
         return true;
       }
       $("#save-status").textContent = "";
@@ -1018,7 +1036,7 @@
     const rows = historialCache.filter((c) => {
       if (!q) return true;
       const fmt = FORMATS[c.format_type];
-      return [c.numero, c.cliente, fmt?.name, c.owner_name]
+      return [c.numero, c.no_doc, c.cliente, fmt?.name, c.owner_name]
         .some((s) => (s || "").toLowerCase().includes(q));
     });
 
@@ -1038,7 +1056,7 @@
           <strong>${escapeHtml(c.cliente || "Sin cliente")}</strong>
           <small>${fmt.name} · ${fecha}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
         </div>
-        <span class="hist-num">${escapeHtml(c.numero)}</span>
+        <span class="hist-num" title="Consecutivo del sistema: ${escapeHtml(c.numero)}">${escapeHtml(c.no_doc ? `No. OTT ${c.no_doc}` : c.numero)}</span>
         <div class="hist-actions">
           <button class="btn btn-primary btn-sm" data-act="edit">Editar</button>
           <button class="btn btn-ghost btn-sm" data-act="pdf">PDF</button>

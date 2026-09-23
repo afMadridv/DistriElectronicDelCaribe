@@ -10,6 +10,8 @@
             autoNum numera las filas solo; withBank agrega la columna Banco;
             medidas [{key,label,unidad}] cambia la descripción por columnas
             solo de números (la unidad la pone el PDF, no quien escribe).
+   - text con calc: {from, factor} no se escribe: vale el campo `from`
+     multiplicado por `factor` (ej. celdas = baterías × 6).
    - checklist: rows [{key,label}] + options [...] (mismo select por fila).
    - signature: nameKey indica el campo de texto con el nombre del firmante;
                 own: true es la firma de quien hace el reporte, y en los
@@ -72,6 +74,9 @@ window.FORMATS = {
     prefix: "OTT",
     fields: [
       { section: "Tipo de servicio" },
+      /* Lo escribe quien llena el formato, como el número de una orden de
+         compra: el sistema no lo pone solo. Sale en las casillas «No. OTT». */
+      { key: "no_ott", label: "No. OTT", type: "text", half: true, placeholder: "Escríbelo, ej: 2451" },
       { key: "tipo_servicio", label: "Servicio", type: "select", required: true, half: true,
         options: ["A - Diagnóstico", "B - Mantenimiento preventivo", "C - Mantenimiento correctivo", "D - Instalación"] },
       { key: "condicion", label: "Condición", type: "select", half: true,
@@ -94,10 +99,15 @@ window.FORMATS = {
       { key: "potencia", label: "Potencia (KVA)", type: "text", half: true },
       { key: "serie", label: "Serie", type: "text", half: true },
       { key: "inventario", label: "Inventario", type: "text", half: true },
-      /* La plantilla dice: «__ BANCO(S) DE __ BATERÍAS Ó __ CELDAS» */
+      /* la plantilla trae las casillas «SERIE □  INVENTARIO: □» */
+      { key: "serie_inventario", label: "Marcar casilla Serie / Inventario", type: "select", half: true,
+        options: ["Serie", "Inventario", "Serie e inventario"] },
+      /* La plantilla dice: «__ BANCO(S) DE __ BATERÍAS Ó __ CELDAS».
+         Cada batería de 12 V tiene 6 celdas: las celdas se calculan solas. */
       { key: "n_bancos", label: "N° de bancos", type: "text", half: true, placeholder: "Ej: 1" },
-      { key: "bancos_baterias", label: "N° de baterías por banco", type: "text", half: true, placeholder: "Ej: 4" },
-      { key: "baterias_cantidad", label: "N° de celdas", type: "text", half: true, placeholder: "Ej: 24" },
+      { key: "bancos_baterias", label: "N° de baterías por banco", type: "text", half: true, placeholder: "Ej: 34" },
+      { key: "baterias_cantidad", label: "N° de celdas (baterías × 6)", type: "text", half: true,
+        placeholder: "Se calcula solo", calc: { from: "bancos_baterias", factor: 6 } },
       { key: "referencia_baterias", label: "Referencia de baterías", type: "text", half: true, placeholder: "Ej: FL1290 GS" },
       { key: "marca_baterias", label: "Marca de baterías", type: "text", half: true, placeholder: "Ej: FULIBATTERY" },
       { key: "baterias_instaladas", label: "Baterías instaladas por", type: "select", half: true,

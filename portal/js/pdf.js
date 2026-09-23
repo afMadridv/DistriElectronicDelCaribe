@@ -178,6 +178,17 @@ async function embedImg(doc, src) {
   }
 }
 
+/* Número que va impreso en el formato. Donde la plantilla pide un número
+   que se escribe a mano (el No. OTT del UPS, como una orden de compra) va
+   el que digitó quien llenó el formulario, y si lo dejó vacío la casilla
+   queda en blanco. En los demás formatos, el consecutivo del sistema, que
+   de todas formas sigue identificando el registro en el historial. */
+function numeroImpreso(formatKey, record) {
+  const campo = (PLANTILLAS[formatKey] || {}).numeroCampo;
+  if (campo) return String((record.data || {})[campo] ?? "").trim();
+  return record.numero || "";
+}
+
 async function build(formatKey, record, opts = {}) {
   const cfg = PLANTILLAS[formatKey];
   if (!cfg) throw new Error("Formato sin plantilla: " + formatKey);
@@ -188,6 +199,7 @@ async function build(formatKey, record, opts = {}) {
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const symbol = await doc.embedFont(StandardFonts.Symbol);
   const data = limpiarDatos(record.data || {}, new Set(font.getCharacterSet()));
+  const numeroDoc = numeroImpreso(formatKey, { ...record, data });
   const pages = doc.getPages();
   const P = (i) => pages[Math.min(i, pages.length - 1)];
 
@@ -267,7 +279,7 @@ async function build(formatKey, record, opts = {}) {
   /* número del documento */
   if (cfg.numero) {
     for (const n of cfg.numero) {
-      drawText(P(n.page), record.numero || "", n.x, n.y, n.size || 10, n.maxW || 110, true, n.c);
+      drawText(P(n.page), numeroDoc, n.x, n.y, n.size || 10, n.maxW || 110, true, n.c);
     }
   }
 
@@ -416,7 +428,7 @@ async function build(formatKey, record, opts = {}) {
       const bt = cfg.baterias;
       const page = P(bt.page);
       const n = bt.numero;
-      drawText(page, record.numero || "", n.x, n.y, n.size, n.maxW || 110, true, n.c);
+      drawText(page, numeroDoc, n.x, n.y, n.size, n.maxW || 110, true, n.c);
 
       const nBancos = bt.xBanks.length;
       const porBanco = Array.from({ length: nBancos }, () => []);
@@ -474,7 +486,7 @@ async function build(formatKey, record, opts = {}) {
 
     for (let p = 0; p < fotos.length; p += PORPAG) {
       const page = doc.addPage([612, 792]);
-      const numero = record.numero || "";
+      const numero = numeroDoc;
 
       /* encabezado: logo arriba a la izquierda, como en la plantilla */
       if (logo) {
@@ -569,6 +581,7 @@ async function build(formatKey, record, opts = {}) {
 
 const PDFGen = {
   build,
+  numeroImpreso,
   async download(formatKey, record, nombreArchivo) {
     const doc = await build(formatKey, record);
     const bytes = await doc.save();
@@ -576,7 +589,7 @@ const PDFGen = {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     const name = (PLANTILLAS[formatKey].file || "documento.pdf").replace(/\.pdf$/i, "");
-    const propuesto = `${name} - ${record.numero || ""}`;
+    const propuesto = `${name} - ${numeroImpreso(formatKey, record) || record.numero || ""}`;
     /* El nombre lo puede elegir quien descarga; se limpian los caracteres
        que Windows no admite en un nombre de archivo. */
     const elegido = String(nombreArchivo || propuesto)

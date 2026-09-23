@@ -55,6 +55,9 @@ const PLANTILLAS = {
   /* ===== REPORTE TÉCNICO UPS (carta, 3 pág) ===== */
   ups: {
     file: "Formato Mantenimiento de UPS 2017.pdf",
+    /* el No. OTT lo escribe quien llena el formato, como una orden de
+       compra; en las casillas «No. OTT» va ese campo, no el consecutivo */
+    numeroCampo: "no_ott",
     numero: [
       { page: 0, x: 403.3, y: 680.7, size: 7.5, maxW: 78.5, c: 1 },
       { page: 2, x: 403.3, y: 700.2, size: 7.5, maxW: 78.5, c: 1 },
@@ -126,6 +129,8 @@ const PLANTILLAS = {
       { key: "voltajes_medidos", page: 0, map: { "Muy altos": [[578.3, 290.3, 8.5, 5.6]], Aceptables: [[578.3, 278.6, 8.5, 5.5]], "Muy bajos": [[578.3, 266.8, 8.5, 5.5]] } },
       { key: "baterias_libres_mant", page: 0, map: { "Sí": [[424.9, 111, 8.5, 11.3]], No: [[451.2, 111, 8.3, 11.3]] } },
       { key: "baterias_ubicacion", page: 0, map: { Externas: [[282.5, 545.5, 8.4, 11.5], [398.6, 93.4, 8.4, 11.3]], Internas: [[319.8, 545.5, 8.4, 11.5], [451.2, 93.4, 8.3, 11.3]], "Internas y externas": [[282.5, 545.5, 8.4, 11.5], [319.8, 545.5, 8.4, 11.5], [398.6, 93.4, 8.4, 11.3], [451.2, 93.4, 8.3, 11.3]] } },
+      /* casillas «SERIE □  INVENTARIO: □» (medidas sobre la plantilla) */
+      { key: "serie_inventario", page: 0, map: { Serie: [[90, 563, 8.4, 11.5]], Inventario: [[160.1, 563, 8.4, 11.5]], "Serie e inventario": [[90, 563, 8.4, 11.5], [160.1, 563, 8.4, 11.5]] } },
       /* Trifásico / Bifásico / Monofásico de cada bloque de voltajes */
       { key: "fase_entrada", page: 0, map: { "Trifásico": [[107.3, 296.3, 8.5, 5.5]], "Bifásico": [[107.3, 284.4, 8.5, 5.5]], "Monofásico": [[107.3, 272.6, 8.5, 5.6]] } },
       { key: "fase_salida", page: 0, map: { "Trifásico": [[107.3, 237.4, 8.5, 5.5]], "Bifásico": [[107.3, 225.6, 8.5, 5.5]], "Monofásico": [[107.3, 213.9, 8.5, 5.5]] } },

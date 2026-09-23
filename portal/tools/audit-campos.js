@@ -47,6 +47,7 @@ for (const key of Object.keys(FORMATS)) {
   if (plantilla.pruebas) pdfKeys.add("chk_pruebas");
   if (plantilla.bateriasChk) pdfKeys.add("chk_baterias");
   pdfKeys.add("imagenes"); // siempre van como páginas anexas
+  if (plantilla.numeroCampo) pdfKeys.add(plantilla.numeroCampo); // número escrito a mano (No. OTT)
 
   const sinImprimir = [...formKeys].filter((k) => !pdfKeys.has(k));
   const sinFormulario = [...pdfKeys].filter((k) => !formKeys.has(k) && k !== "imagenes");

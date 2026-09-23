@@ -174,14 +174,15 @@
         const mine = currentProfile.role === "jefe" ? all : all.filter((c) => c.user_id === currentProfile.id);
         return mine
           .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-          .map((c) => ({ ...c, cliente: c.data?.cliente || "" }));
+          .map((c) => ({ ...c, cliente: c.data?.cliente || "", no_doc: c.data?.no_ott || "" }));
       }
       const PAGE = 1000;
       const rows = [];
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await sb
           .from("cotizaciones")
-          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, cliente:data->>cliente")
+          // no_doc: el No. OTT que se escribe a mano en el UPS (se muestra en el historial)
+          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, cliente:data->>cliente, no_doc:data->>no_ott")
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
