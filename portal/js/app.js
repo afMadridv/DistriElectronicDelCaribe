@@ -10,7 +10,7 @@
   let currentFormat = null;   // clave del formato activo
   let editingRecord = null;   // registro en edición (null = nuevo)
   let formImages = {};        // { fieldKey: [url|dataURL, ...] }
-  let signatures = {};        // { fieldKey: { canvas, drawn, existing } }
+  let signatures = {};        // { fieldKey: pad de firma (ver crearPadFirma) }
   let previewTimer = null;
   let formDirty = false;      // cambios sin guardar en el formulario
 
@@ -87,6 +87,7 @@
     $("#nav-usuarios").classList.toggle("hidden", profile.role !== "jefe");
     renderFormatPicker();
     switchView("generar");
+    vigilarAlmacenamiento();
   }
 
   $("#login-form").addEventListener("submit", async (e) => {
@@ -157,7 +158,118 @@
     if (view === "usuarios") renderUsers();
   }
 
-  $$(".nav-item").forEach((b) => b.addEventListener("click", () => guardExit(() => switchView(b.dataset.view))));
+  $$(".nav-item").forEach((b) => b.addEventListener("click", () => {
+    abrirMenuCelular(false);
+    guardExit(() => switchView(b.dataset.view));
+  }));
+
+  /* ============================================================
+     MENÚ LATERAL
+     En computador y tablet se oculta con las flechas de arriba y
+     queda una franja con los íconos (más espacio para el formato).
+     En el celular vive escondido y se abre desde la barra superior.
+     ============================================================ */
+  const enCelular = window.matchMedia("(max-width: 760px)");
+  const CLAVE_MENU = "dec_menu_mini";
+
+  function leerMenuMini() {
+    try {
+      const v = localStorage.getItem(CLAVE_MENU);
+      if (v !== null) return v === "1";
+    } catch { /* sin almacenamiento local: se usa el valor por defecto */ }
+    // sin preferencia guardada, en tablet arranca oculto para dar espacio al formulario
+    return window.matchMedia("(max-width: 1024px)").matches;
+  }
+  let menuMini = leerMenuMini();
+
+  function aplicarMenu() {
+    $("#app").classList.toggle("sidebar-mini", !enCelular.matches && menuMini);
+    const texto = enCelular.matches ? "Cerrar menú" : menuMini ? "Mostrar menú" : "Ocultar menú";
+    const t = $("#sidebar-toggle");
+    t.title = texto;
+    t.setAttribute("aria-label", texto);
+  }
+
+  function abrirMenuCelular(abrir) {
+    $("#app").classList.toggle("menu-abierto", abrir);
+    $("#menu-open").setAttribute("aria-expanded", String(abrir));
+    document.body.classList.toggle("sin-scroll", abrir);
+  }
+
+  $("#sidebar-toggle").addEventListener("click", () => {
+    if (enCelular.matches) { abrirMenuCelular(false); return; }
+    menuMini = !menuMini;
+    try { localStorage.setItem(CLAVE_MENU, menuMini ? "1" : "0"); } catch { /* sin almacenamiento local */ }
+    aplicarMenu();
+  });
+  $("#menu-open").addEventListener("click", () => abrirMenuCelular(true));
+  $("#sidebar-backdrop").addEventListener("click", () => abrirMenuCelular(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") abrirMenuCelular(false); });
+  const alCambiarTamano = () => { abrirMenuCelular(false); aplicarMenu(); };
+  if (enCelular.addEventListener) enCelular.addEventListener("change", alCambiarTamano);
+  else enCelular.addListener(alCambiarTamano); // Safari < 14
+  aplicarMenu();
+
+  /* ============================================================
+     ALMACENAMIENTO DEL SERVIDOR (barra del menú, solo Jefes)
+     Se consulta al entrar, cada minuto mientras la pestaña está a
+     la vista y después de guardar o borrar algo.
+     ============================================================ */
+  const PLAN = Object.assign({ ARCHIVOS_MB: 1024, BASE_DATOS_MB: 500 }, (window.APP_CONFIG || {}).PLAN || {});
+  const MB = 1048576;
+  let relojAlmacenamiento = null;
+
+  function tamano(bytes) {
+    const mb = bytes / MB;
+    if (mb >= 1024) return (mb / 1024).toLocaleString("es-CO", { maximumFractionDigits: 2 }) + " GB";
+    return mb.toLocaleString("es-CO", { maximumFractionDigits: mb < 10 ? 1 : 0 }) + " MB";
+  }
+
+  function pintarBarra(id, bytes, cupoMB) {
+    const pct = Math.min(100, (bytes / (cupoMB * MB)) * 100);
+    const barra = $(`#${id}`);
+    // un mínimo visible: con poco uso la barra no se ve vacía
+    barra.querySelector(".storage-fill").style.width = (bytes > 0 ? Math.max(pct, 2) : 0) + "%";
+    barra.classList.toggle("alto", pct >= 80 && pct < 95);
+    barra.classList.toggle("lleno", pct >= 95);
+    barra.setAttribute("aria-valuenow", pct.toFixed(0));
+    $(`#${id}-txt`).textContent = `${tamano(bytes)} de ${tamano(cupoMB * MB)}`;
+  }
+
+  async function actualizarAlmacenamiento() {
+    const w = $("#storage-widget");
+    const perfil = Store.getProfile();
+    if (!perfil || perfil.role !== "jefe") { w.classList.add("hidden"); return; }
+    w.classList.remove("hidden");
+    w.classList.add("cargando");
+    const msg = $("#storage-msg");
+    try {
+      const u = await Store.storageUsage();
+      pintarBarra("st-files", Number(u.archivos) || 0, PLAN.ARCHIVOS_MB);
+      pintarBarra("st-db", Number(u.base_datos) || 0, PLAN.BASE_DATOS_MB);
+      msg.classList.add("hidden");
+      const hora = new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+      w.title = `${u.cantidad ?? 0} archivos guardados · actualizado a las ${hora}`;
+    } catch (e) {
+      console.warn("almacenamiento:", e);
+      msg.textContent = esErrorDeRed(e) ? "Sin conexión con el servidor." : (e.message || "No disponible.");
+      msg.classList.remove("hidden");
+    } finally {
+      w.classList.remove("cargando");
+    }
+  }
+
+  function vigilarAlmacenamiento() {
+    clearInterval(relojAlmacenamiento);
+    actualizarAlmacenamiento();
+    relojAlmacenamiento = setInterval(() => {
+      if (document.visibilityState === "visible") actualizarAlmacenamiento();
+    }, 60000);
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Store.getProfile()) actualizarAlmacenamiento();
+  });
+  $("#storage-refresh").addEventListener("click", actualizarAlmacenamiento);
 
   /* ============================================================
      GENERAR — selector de formato
@@ -270,9 +382,14 @@
             .filter((v) => v.src);
           container(false).appendChild(buildImagesField(f));
           break;
-        case "signature":
-          container(false).appendChild(buildSignatureField(f, val));
+        case "signature": {
+          /* La firma de quien hace el reporte sale sola en los formatos
+             nuevos, tomada de SU usuario: cada quien ve solo la suya. Al
+             editar un reporte se conserva la que ya quedó guardada en él. */
+          const propia = !record && f.own ? (Store.getProfile() || {}).firma : null;
+          container(false).appendChild(buildSignatureField(f, val || propia, !val && !!propia));
           break;
+        }
       }
     }
 
@@ -284,6 +401,7 @@
     formDirty = false;
     $("#preview-panel").classList.add("hidden");
     $("#pdf-preview").removeAttribute("src");
+    $("#pdf-canvas").replaceChildren();
     $("#view-generar").scrollIntoView({ behavior: "smooth", block: "start" });
     switchView("generar");
   }
@@ -291,16 +409,23 @@
   /* ----- campo: tabla de ítems ----- */
   function buildItemsField(f, val) {
     const bancos = f.withBank ? (f.maxBancos || 4) : 0;
+    const medidas = f.medidas || null;   // columnas solo de números (voltaje, resistencia…)
     const wrap = document.createElement("div");
     wrap.className = "field";
     wrap.dataset.itemsKey = f.key;
     wrap.dataset.withPrice = f.withPrice ? "1" : "";
+    if (medidas) wrap.classList.add("items-medidas");
     wrap.innerHTML = `
-      ${f.withBank ? `<p class="field-hint">Elige el banco de cada batería. La numeración se reinicia en cada banco y va sola.</p>` : ""}
+      ${f.label && medidas ? `<span>${escapeHtml(f.label)}</span>` : ""}
+      ${f.withBank ? `<p class="field-hint">Elige el banco de cada batería; la fila nueva sigue en el mismo banco de la anterior. La numeración va sola.</p>` : ""}
+      ${medidas ? `<p class="field-hint">Escribe solo los números: ${medidas.map((m) => escapeHtml(m.unidad)).join(" y ")} los pone el formato.</p>` : ""}
       <table class="items-table">
         <thead><tr>
           ${f.withBank ? '<th class="col-banco">Banco</th>' : ""}
-          <th class="col-cant">${escapeHtml(f.colCant || "Cant.")}</th><th>${escapeHtml(f.colDesc || "Descripción")}</th>
+          <th class="col-cant">${escapeHtml(f.colCant || "Cant.")}</th>
+          ${medidas
+            ? medidas.map((m) => `<th class="col-med">${escapeHtml(m.label)} <small>${escapeHtml(m.unidad)}</small></th>`).join("")
+            : `<th>${escapeHtml(f.colDesc || "Descripción")}</th>`}
           ${f.withPrice ? '<th class="col-precio">Vr. unitario</th>' : ""}
           <th class="col-del"></th>
         </tr></thead>
@@ -327,11 +452,20 @@
       const tr = document.createElement("tr");
       const opciones = Array.from({ length: bancos }, (_, i) =>
         `<option value="${i + 1}" ${String(item.banco || 1) === String(i + 1) ? "selected" : ""}>${i + 1}</option>`).join("");
+      /* registros de antes: «13,56 Vdc 16 mΩ» en una sola casilla; se
+         reparten los números en sus columnas, en el mismo orden */
+      const previos = medidas && item.descripcion && medidas.every((m) => item[m.key] == null)
+        ? (String(item.descripcion).match(/\d+(?:[.,]\d+)?/g) || []) : [];
+      const celdas = medidas
+        ? medidas.map((m, i) => `<td class="col-med"><input type="text" inputmode="decimal" autocomplete="off"
+            class="it-med" data-med="${m.key}" value="${escapeHtml(item[m.key] ?? previos[i] ?? "")}"
+            placeholder="${escapeHtml(m.placeholder || "")}" aria-label="${escapeHtml(`${m.label} (${m.unidad})`)}" /></td>`).join("")
+        : `<td><input type="text" class="it-desc" value="${escapeHtml(item.descripcion || "")}" placeholder="${escapeHtml(f.placeholderDesc || f.colDesc || "Descripción")}" /></td>`;
       tr.innerHTML = `
-        ${f.withBank ? `<td class="col-banco"><select class="it-banco">${opciones}</select></td>` : ""}
+        ${f.withBank ? `<td class="col-banco"><select class="it-banco" aria-label="Banco">${opciones}</select></td>` : ""}
         <td class="col-cant"><input type="number" min="1" class="it-cant" value="${escapeHtml(item.cant || 1)}"
           ${f.autoNum ? "readonly tabindex='-1'" : ""} /></td>
-        <td><input type="text" class="it-desc" value="${escapeHtml(item.descripcion || "")}" placeholder="${escapeHtml(f.placeholderDesc || f.colDesc || "Descripción")}" /></td>
+        ${celdas}
         ${f.withPrice ? `<td class="col-precio"><input type="number" min="0" class="it-precio" value="${escapeHtml(item.precio ?? "")}" placeholder="0" /></td>` : ""}
         <td class="col-del"><button type="button" class="row-del" title="Quitar">×</button></td>`;
       tr.querySelector(".row-del").addEventListener("click", () => {
@@ -343,6 +477,24 @@
       const selBanco = tr.querySelector(".it-banco");
       if (selBanco) selBanco.addEventListener("change", () => { renumerar(); schedulePreview(); });
       tbody.appendChild(tr);
+      return tr;
+    }
+
+    /* banco de la última fila: la fila nueva sigue en ese banco (1, 1, 2,
+       2, 2…) en vez de volver siempre al 1 */
+    const ultimoBanco = () => {
+      const sel = tbody.querySelectorAll(".it-banco");
+      return sel.length ? sel[sel.length - 1].value : 1;
+    };
+
+    // en las columnas de medidas solo caben cifras y la coma o el punto decimal
+    if (medidas) {
+      wrap.addEventListener("input", (e) => {
+        const el = e.target;
+        if (!el.classList.contains("it-med")) return;
+        const limpio = el.value.replace(/[^\d.,]/g, "");
+        if (limpio !== el.value) el.value = limpio;
+      });
     }
 
     function updateTotal() {
@@ -361,9 +513,11 @@
     renumerar();
     updateTotal();
     wrap.querySelector(".add-row-btn").addEventListener("click", () => {
-      addRow();
+      const tr = addRow(f.withBank ? { banco: ultimoBanco() } : {});
       renumerar();
       schedulePreview();
+      // listo para escribir la siguiente medida sin tocar la casilla
+      if (medidas) tr.querySelector(".it-med").focus();
     });
     return wrap;
   }
@@ -456,34 +610,41 @@
     return wrap;
   }
 
-  /* ----- campo: firma ----- */
-  function buildSignatureField(f, existing) {
-    const wrap = document.createElement("div");
-    wrap.className = "field";
-    wrap.innerHTML = `
-      <span>${f.label}</span>
-      <canvas class="sig-canvas" width="600" height="180"></canvas>
-      <div class="sig-actions"><button type="button" class="btn btn-ghost btn-sm sig-clear">Limpiar firma</button></div>`;
-
-    const canvas = wrap.querySelector("canvas");
+  /* ----- lienzo de firma (formularios y ficha del usuario) -----
+     Fondo transparente: así la firma no tapa las líneas del PDF. */
+  function crearPadFirma(canvas, alCambiar = () => {}) {
     const ctx = canvas.getContext("2d");
-    // fondo transparente: así la firma no tapa el texto del PDF
-    ctx.strokeStyle = "#141414";
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    const pad = { canvas, drawn: false };
+    const pincel = () => {
+      ctx.strokeStyle = "#141414";
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+    };
+    pincel();
 
-    const state = { canvas, drawn: false, existing: existing || null };
-    signatures[f.key] = state;
-
-    if (existing) {
+    pad.limpiar = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pad.drawn = false;
+    };
+    /* La firma guardada se centra sin deformarla. Antes se estiraba a
+       todo el lienzo, y cada vez que se volvía a guardar salía más ancha. */
+    pad.pintarImagen = (img) => {
+      pad.limpiar();
+      const esc = Math.min(1, canvas.width / img.width, canvas.height / img.height);
+      const w = img.width * esc, h = img.height * esc;
+      ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+      pincel();
+      pad.drawn = true;
+    };
+    pad.cargar = (src) => new Promise((ok) => {
+      if (!src) { pad.limpiar(); ok(); return; }
       const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        state.drawn = true;
-      };
-      img.src = existing;
-    }
+      img.onload = () => { pad.pintarImagen(img); ok(); };
+      img.onerror = () => ok();
+      img.src = src;
+    });
+    pad.exportar = () => (pad.drawn ? cropSignature(canvas) : null);
 
     let drawing = false;
     const pos = (e) => {
@@ -505,18 +666,67 @@
       const p = pos(e);
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
-      state.drawn = true;
+      pad.drawn = true;
     });
     const stop = () => {
-      if (drawing) { drawing = false; schedulePreview(); }
+      if (drawing) { drawing = false; alCambiar(); }
     };
     canvas.addEventListener("pointerup", stop);
     canvas.addEventListener("pointerleave", stop);
+    canvas.addEventListener("pointercancel", stop);
+    return pad;
+  }
+
+  /* Foto o escaneo de una firma → PNG con fondo transparente, del tamaño
+     del lienzo. Lo claro (el papel) se vuelve transparente y los bordes
+     del trazo quedan suaves. */
+  function imagenAFirma(file) {
+    return new Promise((ok, mal) => {
+      const lector = new FileReader();
+      lector.onerror = () => mal(new Error("No se pudo leer la imagen."));
+      lector.onload = () => {
+        const img = new Image();
+        img.onerror = () => mal(new Error("El archivo no es una imagen válida."));
+        img.onload = () => {
+          const esc = Math.min(1, 600 / img.width, 180 / img.height);
+          const w = Math.max(1, Math.round(img.width * esc));
+          const h = Math.max(1, Math.round(img.height * esc));
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          const ctx = c.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          const datos = ctx.getImageData(0, 0, w, h);
+          const px = datos.data;
+          for (let i = 0; i < px.length; i += 4) {
+            const luz = (px[i] + px[i + 1] + px[i + 2]) / 3;
+            if (luz >= 200) px[i + 3] = 0;
+            else if (luz > 150) px[i + 3] = Math.round(px[i + 3] * (200 - luz) / 50);
+          }
+          ctx.putImageData(datos, 0, 0);
+          ok(c);
+        };
+        img.src = lector.result;
+      };
+      lector.readAsDataURL(file);
+    });
+  }
+
+  /* ----- campo: firma ----- */
+  function buildSignatureField(f, existing, deUsuario = false) {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.innerHTML = `
+      <span>${f.label}</span>
+      <canvas class="sig-canvas" width="600" height="180"></canvas>
+      <div class="sig-actions"><button type="button" class="btn btn-ghost btn-sm sig-clear">Limpiar firma</button></div>
+      ${deUsuario ? '<small class="field-hint">Se puso tu firma guardada. Si quieres, límpiala y firma de nuevo.</small>' : ""}`;
+
+    const pad = crearPadFirma(wrap.querySelector("canvas"), schedulePreview);
+    signatures[f.key] = pad;
+    if (existing) pad.cargar(existing);
 
     wrap.querySelector(".sig-clear").addEventListener("click", () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      state.drawn = false;
-      state.existing = null;
+      pad.limpiar();
       schedulePreview();
     });
     return wrap;
@@ -567,15 +777,19 @@
           const wrap = document.querySelector(`[data-items-key="${f.key}"]`);
           const rows = [];
           wrap.querySelectorAll("tbody tr").forEach((tr) => {
-            const item = {
-              cant: tr.querySelector(".it-cant").value,
-              descripcion: tr.querySelector(".it-desc").value.trim(),
-            };
+            const item = { cant: tr.querySelector(".it-cant").value };
+            if (f.medidas) {
+              // solo el número; la unidad la pone el PDF
+              tr.querySelectorAll(".it-med").forEach((el) => { item[el.dataset.med] = el.value.trim(); });
+            } else {
+              item.descripcion = tr.querySelector(".it-desc").value.trim();
+            }
             const banco = tr.querySelector(".it-banco");
             if (banco) item.banco = Number(banco.value) || 1;
             const precio = tr.querySelector(".it-precio");
             if (precio) item.precio = precio.value;
-            if (item.descripcion) rows.push(item);
+            const lleno = f.medidas ? f.medidas.some((m) => item[m.key]) : item.descripcion;
+            if (lleno) rows.push(item);
           });
           data[f.key] = rows;
           break;
@@ -608,50 +822,65 @@
     formDirty = true;
   }
 
-  /* Chrome de Android no trae visor de PDF dentro de un iframe: la vista
-     previa salía en blanco en el celular. Ahí se abre en otra pestaña. */
-  const sinVisorPDF = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  /* Celulares y tablets no muestran bien un PDF dentro de un iframe: Chrome
+     de Android lo descarga o lo abre en otra pestaña y el iPad enseña solo
+     la primera página. Ahí las páginas se dibujan con el visor propio
+     (js/visor.js), debajo del formulario, igual que en el computador. */
+  const esMovil = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)); // iPad con iPadOS
+  const visorPropio = esMovil || navigator.pdfViewerEnabled === false;
   let urlPreview = null;
 
-  async function refreshPreview() {
+  async function refreshPreview({ desplazar = false } = {}) {
     if (!currentFormat) return;
-    $("#preview-panel").classList.remove("hidden");
+    const panel = $("#preview-panel");
+    panel.classList.remove("hidden");
+    // en pantallas angostas la vista previa queda debajo del formulario: se baja hasta ella
+    if (desplazar) {
+      const apilado = window.matchMedia("(max-width: 1024px)").matches;
+      panel.scrollIntoView({ behavior: "smooth", block: apilado ? "start" : "nearest" });
+    }
     const aviso = $("#preview-aviso");
+    const lienzos = $("#pdf-canvas");
+    aviso.classList.add("hidden");
     try {
       const record = await Store.hydrateImages({
         numero: editingRecord ? editingRecord.numero : `${FORMATS[currentFormat].prefix}-BORRADOR`,
         data: collectData(),
       });
-      urlPreview = await PDFGen.previewDataURL(currentFormat, record);
-      $("#open-preview").classList.remove("hidden");
-      if (sinVisorPDF) {
+      if (visorPropio) {
         $("#pdf-preview").classList.add("hidden");
-        aviso.textContent = "Tu navegador no muestra el PDF aquí dentro. Pulsa «Abrir en otra pestaña».";
-        aviso.classList.remove("hidden");
-        window.open(urlPreview, "_blank");
+        $("#open-preview").classList.add("hidden");
+        lienzos.classList.remove("hidden");
+        lienzos.classList.add("cargando");
+        const bytes = await PDFGen.previewBytes(currentFormat, record);
+        await VisorPDF.pintar(bytes, lienzos);
       } else {
+        urlPreview = await PDFGen.previewDataURL(currentFormat, record);
+        lienzos.classList.add("hidden");
+        $("#open-preview").classList.remove("hidden");
         $("#pdf-preview").classList.remove("hidden");
         $("#pdf-preview").src = urlPreview;
-        aviso.classList.add("hidden");
       }
     } catch (e) {
       console.error("preview:", e);
       aviso.textContent = "No se pudo generar la vista previa: " + mensajeError(e);
       aviso.classList.remove("hidden");
       toast("No se pudo generar la vista previa.", "error");
+    } finally {
+      lienzos.classList.remove("cargando");
     }
   }
   $("#open-preview").addEventListener("click", () => {
     if (urlPreview) window.open(urlPreview, "_blank");
   });
-  $("#refresh-preview").addEventListener("click", refreshPreview);
+  $("#refresh-preview").addEventListener("click", () => refreshPreview());
 
   $("#preview-btn").addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
     try {
-      await refreshPreview();
-      $("#preview-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      await refreshPreview({ desplazar: true });
     } finally { btn.disabled = false; }
   });
 
@@ -729,6 +958,7 @@
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
       toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
+      actualizarAlmacenamiento();
       return true;
     } catch (e) {
       console.error(`guardar (${etapa}):`, e);
@@ -843,6 +1073,7 @@
           await Store.deleteCotizacion(id);
           toast("Cotización eliminada.");
           renderHistorial();
+          actualizarAlmacenamiento();
         } catch (e) { toast(e.message || "Error al eliminar.", "error"); }
       });
     });
@@ -897,7 +1128,11 @@
     });
   }
 
-  function openUserModal(user) {
+  /* firma digital del usuario: a mano alzada o adjunta como imagen */
+  let firmaUsuarioCambio = false;
+  const padUsuario = crearPadFirma($("#uf-firma"), () => { firmaUsuarioCambio = true; });
+
+  async function openUserModal(user) {
     editingUserId = user ? user.id : null;
     $("#user-modal-title").textContent = user ? "Editar usuario" : "Nuevo trabajador";
     $("#uf-name").value = user ? user.name : "";
@@ -906,9 +1141,38 @@
     $("#uf-password").required = !user;
     $("#uf-password").placeholder = user ? "Dejar vacío para no cambiarla" : "Mínimo 6 caracteres";
     $("#uf-role").value = user ? user.role : "trabajador";
-    $("#user-form-error").classList.add("hidden");
+    const err = $("#user-form-error");
+    err.classList.add("hidden");
+    padUsuario.limpiar();
+    firmaUsuarioCambio = false;
     $("#user-modal").classList.remove("hidden");
+    if (!user) return;
+    try {
+      const firma = await Store.getUserFirma(user.id);
+      // si mientras llegaba ya empezó a firmar o cambió de usuario, no se pisa
+      if (!firmaUsuarioCambio && editingUserId === user.id) await padUsuario.cargar(firma);
+    } catch (ex) {
+      err.textContent = ex.message || "No se pudo cargar la firma.";
+      err.classList.remove("hidden");
+    }
   }
+
+  $("#uf-firma-clear").addEventListener("click", () => {
+    padUsuario.limpiar();
+    firmaUsuarioCambio = true;
+  });
+  $("#uf-firma-adjuntar").addEventListener("click", () => $("#uf-firma-file").click());
+  $("#uf-firma-file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      padUsuario.pintarImagen(await imagenAFirma(file));
+      firmaUsuarioCambio = true;
+    } catch (ex) {
+      toast(ex.message || "No se pudo usar esa imagen.", "error");
+    }
+  });
 
   $("#new-user-btn").addEventListener("click", () => openUserModal(null));
   $("#user-modal [data-close-modal]").addEventListener("click", () => $("#user-modal").classList.add("hidden"));
@@ -923,15 +1187,33 @@
     };
     const err = $("#user-form-error");
     err.classList.add("hidden");
+    const eraNuevo = !editingUserId;
     try {
       if (editingUserId) await Store.updateUser(editingUserId, payload);
-      else await Store.createUser(payload);
+      else {
+        /* desde aquí el usuario ya existe: si luego falla la firma y se
+           reintenta, se actualiza en vez de intentar crearlo otra vez */
+        editingUserId = await Store.createUser(payload);
+      }
+      if (firmaUsuarioCambio && editingUserId) {
+        try {
+          await Store.saveUserFirma(editingUserId, padUsuario.exportar());
+          firmaUsuarioCambio = false;
+        } catch (ex) {
+          throw new Error(`${eraNuevo ? "Trabajador creado" : "Datos guardados"}, pero la firma no: ${ex.message}`);
+        }
+      }
       $("#user-modal").classList.add("hidden");
-      toast(editingUserId ? "Usuario actualizado." : "Trabajador creado.");
+      toast(eraNuevo ? "Trabajador creado." : "Usuario actualizado.");
       renderUsers();
+      actualizarAlmacenamiento();
     } catch (ex) {
       err.textContent = ex.message || "Error al guardar el usuario.";
       err.classList.remove("hidden");
+      if (eraNuevo && editingUserId) {
+        $("#user-modal-title").textContent = "Editar usuario";
+        $("#uf-password").required = false;
+      }
     }
   });
 

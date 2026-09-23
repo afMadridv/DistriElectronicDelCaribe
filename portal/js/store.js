@@ -16,6 +16,21 @@
   function lsSet(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
   function uid() { return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
 
+  /* perfil que usa la app (el demo guarda la misma forma) */
+  function perfil(u) {
+    return { id: u.id, name: u.name ?? u.full_name, email: u.email, role: u.role, firma: u.firma || null };
+  }
+
+  /* Si falta correr el schema.sql nuevo, Supabase responde que no encuentra
+     la función o la columna: se dice qué hacer en vez de mostrar el error crudo. */
+  function errorDeEsquema(error, que) {
+    const m = String((error && error.message) || "");
+    if (/could not find the function|does not exist|schema cache|column .* not found/i.test(m)) {
+      return new Error(`Falta actualizar la base de datos para ${que}: pega supabase/schema.sql en el SQL Editor de Supabase y dale Run.`);
+    }
+    return new Error(m || `No se pudo ${que}.`);
+  }
+
   /* "lalfonso" → "lalfonso@distrielectronicdelcaribe.com" */
   function normalizeEmail(input) {
     const v = String(input || "").trim();
@@ -88,7 +103,7 @@
         const sess = lsGet(DEMO_KEYS.session, null);
         if (sess) {
           const user = lsGet(DEMO_KEYS.users, []).find((u) => u.id === sess.id);
-          if (user) currentProfile = { id: user.id, name: user.name, email: user.email, role: user.role };
+          if (user) currentProfile = perfil(user);
         }
         return currentProfile;
       }
@@ -103,7 +118,7 @@
     async _loadProfile(userId) {
       const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
       if (error) throw error;
-      return { id: data.id, name: data.full_name, email: data.email, role: data.role };
+      return perfil(data);
     },
 
     /* ---------- autenticación ---------- */
@@ -116,7 +131,7 @@
           (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
         );
         if (!user) throw new Error("Usuario o contraseña incorrectos.");
-        currentProfile = { id: user.id, name: user.name, email: user.email, role: user.role };
+        currentProfile = perfil(user);
         lsSet(DEMO_KEYS.session, { id: user.id });
         return currentProfile;
       }
@@ -320,11 +335,13 @@
         const users = lsGet(DEMO_KEYS.users, []);
         if (users.some((u) => u.email.toLowerCase() === email.toLowerCase()))
           throw new Error("Ya existe un usuario con ese correo.");
-        users.push({ id: uid(), name, email, password, role });
+        const id = uid();
+        users.push({ id, name, email, password, role });
         lsSet(DEMO_KEYS.users, users);
-        return;
+        return id;
       }
-      await this._adminUsers({ action: "create", name, email, password, role });
+      const r = await this._adminUsers({ action: "create", name, email, password, role });
+      return r && r.id;
     },
 
     async updateUser(id, { name, email, password, role }) {
@@ -346,6 +363,57 @@
         return;
       }
       await this._adminUsers({ action: "delete", id });
+    },
+
+    /* ---------- firma digital de cada usuario ----------
+       Es un PNG (dataURL) guardado en su perfil. Cada quien solo puede
+       leer la suya (RLS de profiles); el jefe, la de todos. */
+    async getUserFirma(id) {
+      if (this.isDemo) return (lsGet(DEMO_KEYS.users, []).find((u) => u.id === id) || {}).firma || null;
+      const { data, error } = await sb.from("profiles").select("firma").eq("id", id).single();
+      if (error) throw errorDeEsquema(error, "leer la firma");
+      return data.firma || null;
+    },
+
+    async saveUserFirma(id, firma) {
+      if (this.isDemo) {
+        const users = lsGet(DEMO_KEYS.users, []);
+        const u = users.find((x) => x.id === id);
+        if (!u) throw new Error("Usuario no encontrado.");
+        u.firma = firma || null;
+        lsSet(DEMO_KEYS.users, users);
+      } else {
+        const { error } = await sb.rpc("guardar_firma", { p_usuario: id, p_firma: firma || null });
+        if (error) throw errorDeEsquema(error, "guardar la firma");
+      }
+      // si es la propia, los formatos nuevos la usan desde ya
+      if (currentProfile && currentProfile.id === id) currentProfile.firma = firma || null;
+    },
+
+    /* ---------- almacenamiento usado (solo jefe) ----------
+       bytes de las fotos/archivos del Storage y tamaño de la base de datos */
+    async storageUsage() {
+      if (this.isDemo) {
+        // en demo todo vive en localStorage: se mide eso
+        let total = 0, archivos = 0, cantidad = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          total += (k.length + (localStorage.getItem(k) || "").length) * 2;
+        }
+        for (const c of lsGet(DEMO_KEYS.cots, [])) {
+          for (const v of Object.values(c.data || {})) {
+            if (!Array.isArray(v)) continue;
+            for (const x of v) {
+              const s = x && typeof x === "object" ? x.src : x;
+              if (typeof s === "string" && s.startsWith("data:image")) { archivos += Math.round(s.length * 0.75); cantidad++; }
+            }
+          }
+        }
+        return { archivos, cantidad, base_datos: total };
+      }
+      const { data, error } = await sb.rpc("uso_almacenamiento");
+      if (error) throw errorDeEsquema(error, "ver el almacenamiento");
+      return data;
     },
 
     /* Llama a la Edge Function admin-users (usa service role en el servidor) */

@@ -152,7 +152,9 @@ const PLANTILLAS = {
       { key: "chk_final_p3b", src: "chk_final", page: 2, rows: { funcionando: 365.5, fuera_servicio: 353.5 }, opts: { "Sí": 354.8, No: 381.1 }, box: [8.5, 11.7] },
       { key: "chk_final_p3c", src: "chk_final", page: 2, rows: { se_puede_reparar: 365.5 }, opts: { "Sí": 521.3, No: 547.5 }, box: [8.5, 11.7] },
     ],
-    baterias: { page: 1, xBanks: [98.8, 232, 365.2, 501.4], colW: 70.5, yTop: 582.1, step: 11.76, max: 40, size: 7, numero: { x: 428, y: 672, size: 7.5, maxW: 78, c: 1 }, bancoNoX: [67, 200.1, 333.3, 466.5], bancoNoW: 18, bancoNoY: 611.3 },
+    /* unidades: se escriben junto a cada número; en el formulario solo
+       se digita la cifra */
+    baterias: { page: 1, xBanks: [98.8, 232, 365.2, 501.4], colW: 70.5, yTop: 582.1, step: 11.76, max: 40, size: 7, numero: { x: 428, y: 672, size: 7.5, maxW: 78, c: 1 }, bancoNoX: [67, 200.1, 333.3, 466.5], bancoNoW: 18, bancoNoY: 611.3, unidades: { voltaje: "Vdc", resistencia: "mΩ" } },
     sigs: [
       { key: "firma", page: 2, x: 110, y: 125, h: 28, maxW: 130 },
       { key: "firma_tecnico", page: 2, x: 430, y: 141, h: 26, maxW: 120 },

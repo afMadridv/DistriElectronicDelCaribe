@@ -12,6 +12,8 @@
 --   3) Consecutivo real del número de documento
 --   4) Storage privado de imágenes
 --   5) Migración de datos ya guardados
+--   6) Firma digital de cada usuario
+--   7) Almacenamiento usado (barra del menú)
 -- ============================================================
 
 
@@ -286,6 +288,69 @@ update public.cotizaciones c
        ))
  where jsonb_typeof(c.data -> 'imagenes') = 'array'
    and c.data ->> 'imagenes' like '%/cotizacion-images/%';
+
+
+-- ============================================================
+-- 6) FIRMA DIGITAL DE CADA USUARIO
+--    PNG (dataURL) guardado en el perfil. Por la política
+--    profiles_select cada quien lee solo la suya y el jefe la de
+--    todos: el usuario Y nunca recibe la firma del usuario X.
+--    Se escribe solo con guardar_firma(): el jefe la de cualquiera,
+--    cada usuario la propia.
+-- ============================================================
+alter table public.profiles add column if not exists firma text;
+
+alter table public.profiles drop constraint if exists profiles_firma_check;
+alter table public.profiles add constraint profiles_firma_check check (
+  firma is null
+  or (firma like 'data:image/png;base64,%' and length(firma) <= 700000)
+);
+
+create or replace function public.guardar_firma(p_usuario uuid, p_firma text)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+  if p_usuario <> auth.uid() and not public.is_jefe() then
+    raise exception 'Solo los Jefes pueden cambiar la firma de otro usuario.';
+  end if;
+  update public.profiles set firma = nullif(p_firma, '') where id = p_usuario;
+  if not found then
+    raise exception 'Usuario no encontrado.';
+  end if;
+end;
+$$;
+
+revoke all on function public.guardar_firma(uuid, text) from public, anon;
+grant execute on function public.guardar_firma(uuid, text) to authenticated;
+
+
+-- ============================================================
+-- 7) ALMACENAMIENTO USADO
+--    Lo que muestra la barra del menú (solo a los Jefes):
+--    bytes de todos los archivos del Storage y tamaño de la base.
+-- ============================================================
+create or replace function public.uso_almacenamiento()
+returns json
+language plpgsql stable security definer set search_path = public, storage
+as $$
+begin
+  if not public.is_jefe() then
+    raise exception 'Solo los Jefes pueden ver el almacenamiento.';
+  end if;
+  return json_build_object(
+    'archivos',   (select coalesce(sum((metadata ->> 'size')::bigint), 0) from storage.objects),
+    'cantidad',   (select count(*) from storage.objects),
+    'base_datos', pg_database_size(current_database())
+  );
+end;
+$$;
+
+revoke all on function public.uso_almacenamiento() from public, anon;
+grant execute on function public.uso_almacenamiento() to authenticated;
 
 
 -- ============================================================

@@ -7,9 +7,13 @@
    signature | checklist
    - "half: true" pone dos campos en la misma fila.
    - items: colCant / colDesc personalizan encabezados; withPrice agrega precios;
-            autoNum numera las filas solo; withBank agrega la columna Banco.
+            autoNum numera las filas solo; withBank agrega la columna Banco;
+            medidas [{key,label,unidad}] cambia la descripción por columnas
+            solo de números (la unidad la pone el PDF, no quien escribe).
    - checklist: rows [{key,label}] + options [...] (mismo select por fila).
-   - signature: nameKey indica el campo de texto con el nombre del firmante.
+   - signature: nameKey indica el campo de texto con el nombre del firmante;
+                own: true es la firma de quien hace el reporte, y en los
+                formatos nuevos se llena sola con la firma de su usuario.
    ============================================================ */
 
 const CHK_ESTADO = ["Bien", "Mal", "Regular", "N/A", "NAC", "NP"];
@@ -55,7 +59,7 @@ window.FORMATS = {
       { section: "Firmas" },
       { key: "firma_funcionario", label: "Firma del funcionario", type: "signature", nameKey: "nombre_funcionario" },
       { key: "nombre_funcionario", label: "Nombre del funcionario", type: "text", half: true },
-      { key: "firma_trabajador", label: "Firma del trabajador", type: "signature", nameKey: "nombre_trabajador" },
+      { key: "firma_trabajador", label: "Firma del trabajador", type: "signature", nameKey: "nombre_trabajador", own: true },
       { key: "nombre_trabajador", label: "Nombre del trabajador", type: "text", half: true },
     ],
   },
@@ -137,10 +141,15 @@ window.FORMATS = {
         { key: "voltaje_cada_bateria", label: "Medición voltaje en cada batería" },
       ]},
       /* La numeración de cada batería es automática y se reinicia en cada
-         banco; el banco se elige por fila (la página 2 tiene 4 columnas). */
-      { key: "voltajes_baterias", label: "Voltaje por batería (opcional)", type: "items",
-        colCant: "Batería N°", colDesc: "Voltaje / resistencia", autoNum: true, withBank: true, maxBancos: 4,
-        placeholderDesc: "Ej: 13,56 Vdc 16 mΩ" },
+         banco; el banco se elige por fila (la página 2 tiene 4 columnas).
+         Voltaje y resistencia van en columnas aparte y solo con números:
+         «Vdc» y «mΩ» los agrega el PDF. */
+      { key: "voltajes_baterias", label: "Voltaje y resistencia por batería (opcional)", type: "items",
+        colCant: "Batería N°", autoNum: true, withBank: true, maxBancos: 4,
+        medidas: [
+          { key: "voltaje", label: "Voltaje", unidad: "Vdc", placeholder: "13,56" },
+          { key: "resistencia", label: "Resistencia", unidad: "mΩ", placeholder: "16" },
+        ] },
       { key: "banco1_ubicacion", label: "Banco 1 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
       { key: "banco2_ubicacion", label: "Banco 2 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
       { key: "banco3_ubicacion", label: "Banco 3 — ubicación", type: "select", half: true, options: ["Interno", "Externo"] },
@@ -195,7 +204,7 @@ window.FORMATS = {
       { key: "firma", label: "Firma del cliente", type: "signature", nameKey: "firma_nombre" },
       { section: "Técnico DistriElectronic" },
       { key: "tecnico", label: "Nombre del técnico", type: "text", half: true },
-      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico" },
+      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico", own: true },
     ],
   },
 
@@ -328,7 +337,7 @@ window.FORMATS = {
       { key: "firma", label: "Firma del cliente", type: "signature", nameKey: "firma_nombre" },
       { section: "Técnico DistriElectronic" },
       { key: "tecnico", label: "Nombre del técnico", type: "text", half: true },
-      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico" },
+      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico", own: true },
     ],
   },
 
@@ -391,7 +400,7 @@ window.FORMATS = {
       { section: "Firma del técnico" },
       { key: "tecnico", label: "Nombre del técnico", type: "text", half: true },
       { key: "cc_tecnico", label: "C.C. del técnico", type: "text", half: true },
-      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico" },
+      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico", own: true },
       { section: "Firma del cliente" },
       { key: "firma_nombre", label: "Nombre del cliente", type: "text", half: true },
       { key: "cc_cliente", label: "C.C. del cliente", type: "text", half: true },
@@ -448,7 +457,7 @@ window.FORMATS = {
       { key: "firma", label: "Firma del cliente", type: "signature", nameKey: "firma_nombre" },
       { section: "Técnico DistriElectronic" },
       { key: "tecnico", label: "Nombre del técnico", type: "text", half: true },
-      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico" },
+      { key: "firma_tecnico", label: "Firma del técnico", type: "signature", nameKey: "tecnico", own: true },
     ],
   },
 };

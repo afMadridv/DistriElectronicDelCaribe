@@ -54,12 +54,50 @@ function fmtDate(iso) {
   return y && m && d ? `${d}/${m}/${y}` : String(iso);
 }
 
+/* Ancho del texto. La «Ω» no existe en Helvetica (se dibuja con la fuente
+   Symbol, ver `pintar`): para medir se cuenta como una «O», que ocupa
+   prácticamente lo mismo (778 contra 768 milésimas). */
+function medir(font, text, size) {
+  return font.widthOfTextAtSize(String(text ?? "").replace(/Ω/g, "O"), size);
+}
+
 /* recorta el texto al ancho disponible */
 function fit(font, text, size, maxW) {
   let t = String(text ?? "");
   if (!maxW) return t;
-  while (font.widthOfTextAtSize(t, size) > maxW && t.length > 1) t = t.slice(0, -1);
+  while (medir(font, t, size) > maxW && t.length > 1) t = t.slice(0, -1);
   return t;
+}
+
+/* Las fuentes estándar del PDF solo traen el juego WinAnsi (latín): un
+   carácter fuera de él, como «Ω», «≥» o un emoji escrito desde el celular,
+   hacía fallar el PDF entero. Se cambia por su equivalente o se omite; la
+   «Ω» se conserva porque se dibuja aparte con la fuente Symbol. */
+const EQUIVALENTES = { "Ω": "Ω", "≤": "<=", "≥": ">=", "≠": "!=", "≈": "~", "μ": "µ", " ": " " };
+
+function limpiarTexto(s, juego) {
+  let out = "";
+  for (const ch of s) {
+    if (ch === "Ω" || ch === "\n" || juego.has(ch.codePointAt(0))) { out += ch; continue; }
+    if (EQUIVALENTES[ch]) { out += EQUIVALENTES[ch]; continue; }
+    if (/\s/.test(ch)) { out += " "; continue; }
+    const sinTilde = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (sinTilde !== ch && [...sinTilde].every((c) => juego.has(c.codePointAt(0)))) out += sinTilde;
+  }
+  return out;
+}
+
+/* Limpia todos los textos del registro; las imágenes (data:, rutas y URLs)
+   son ASCII y se dejan tal cual para no recorrerlas carácter a carácter. */
+function limpiarDatos(v, juego) {
+  if (typeof v === "string") return /^(data:|https?:|blob:)/.test(v) ? v : limpiarTexto(v, juego);
+  if (Array.isArray(v)) return v.map((x) => limpiarDatos(x, juego));
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k] = limpiarDatos(x, juego);
+    return o;
+  }
+  return v;
 }
 
 /* Deja el texto comparable: sin tildes, mayúsculas, espacios ni la unidad
@@ -96,7 +134,7 @@ function wrapText(font, text, size, maxW) {
     let line = "";
     for (const w of para.split(/\s+/).filter(Boolean)) {
       const test = line ? line + " " + w : w;
-      if (font.widthOfTextAtSize(test, size) <= maxW) line = test;
+      if (medir(font, test, size) <= maxW) line = test;
       else { if (line) lines.push(line); line = w; }
     }
     lines.push(line);
@@ -143,14 +181,27 @@ async function embedImg(doc, src) {
 async function build(formatKey, record, opts = {}) {
   const cfg = PLANTILLAS[formatKey];
   if (!cfg) throw new Error("Formato sin plantilla: " + formatKey);
-  const data = record.data || {};
 
   const bytes = await fetchTemplate(cfg.file, opts.templateDir);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, throwOnInvalidObject: false });
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const symbol = await doc.embedFont(StandardFonts.Symbol);
+  const data = limpiarDatos(record.data || {}, new Set(font.getCharacterSet()));
   const pages = doc.getPages();
   const P = (i) => pages[Math.min(i, pages.length - 1)];
+
+  /* Escribe el texto por tramos: las «Ω» van con la fuente Symbol y el
+     resto con la fuente pedida, uno pegado al otro. */
+  const pintar = (page, t, x, y, size, f, color) => {
+    let cx = x;
+    for (const tramo of String(t).split(/(Ω+)/)) {
+      if (!tramo) continue;
+      const ff = tramo[0] === "Ω" ? symbol : f;
+      page.drawText(tramo, { x: cx, y, size, font: ff, color });
+      cx += ff.widthOfTextAtSize(tramo, size);
+    }
+  };
 
   /* center: centra el texto dentro de [x, x+maxW] — así los datos quedan
      centrados sobre la línea del formato, como en los reportes en limpio. */
@@ -162,11 +213,11 @@ async function build(formatKey, record, opts = {}) {
       /* antes de recortar se reduce la letra: así los valores largos
          siguen leyéndose completos dentro de su casilla */
       const min = Math.max(4.5, size * 0.6);
-      while (s > min && f.widthOfTextAtSize(t, s) > maxW) s -= 0.25;
+      while (s > min && medir(f, t, s) > maxW) s -= 0.25;
       t = fit(f, t, s, maxW);
     }
-    const dx = center && maxW ? Math.max(0, (maxW - f.widthOfTextAtSize(t, s)) / 2) : 0;
-    page.drawText(t, { x: x + dx, y, size: s, font: f, color: INK });
+    const dx = center && maxW ? Math.max(0, (maxW - medir(f, t, s)) / 2) : 0;
+    pintar(page, t, x + dx, y, s, f, INK);
   };
   /* (x,y) es el CENTRO de la casilla. Si se conoce el tamaño del recuadro
      (box = [ancho, alto]) se rellena de color, como en los reportes hechos
@@ -351,7 +402,16 @@ async function build(formatKey, record, opts = {}) {
      no lo traigan (registros anteriores) se reparten llenando un banco tras
      otro, como se hacía antes. */
   if (cfg.baterias) {
-    const rows = (data.voltajes_baterias || []).filter((r) => (r.descripcion || "").trim());
+    /* Voltaje y resistencia llegan solo como números y aquí se les pone la
+       unidad. Los registros de antes traen todo escrito en «descripcion». */
+    const unidades = cfg.baterias.unidades || {};
+    const medida = (r) => {
+      const partes = Object.entries(unidades)
+        .filter(([k]) => String(r[k] ?? "").trim())
+        .map(([k, u]) => `${String(r[k]).trim()} ${u}`);
+      return partes.length ? partes.join("  ") : String(r.descripcion || "").trim();
+    };
+    const rows = (data.voltajes_baterias || []).filter((r) => medida(r));
     if (rows.length) {
       const bt = cfg.baterias;
       const page = P(bt.page);
@@ -372,7 +432,7 @@ async function build(formatKey, record, opts = {}) {
         drawText(page, String(banco + 1), bt.bancoNoX[banco], bt.bancoNoY, 8, bt.bancoNoW || 18, true, true);
         /* la plantilla ya trae numerada cada batería: solo va el voltaje */
         lista.slice(0, bt.max).forEach((r, fila) => {
-          drawText(page, r.descripcion, bt.xBanks[banco], bt.yTop - fila * bt.step,
+          drawText(page, medida(r), bt.xBanks[banco], bt.yTop - fila * bt.step,
                    bt.size, bt.colW || 70, false, true);
         });
       });
@@ -484,11 +544,9 @@ async function build(formatKey, record, opts = {}) {
           const libre = CELDA_W - 12 - anchoEtiqueta - 3;
           const lineas = wrapText(font, desc, 8, libre).slice(0, 2);
           lineas.forEach((linea, n) => {
-            page.drawText(fit(font, linea, 8, n === 0 ? libre : CELDA_W - 12), {
-              x: n === 0 ? x0 + 5 + anchoEtiqueta + 3 : x0 + 5,
-              y: yBase + PIE_H - 11 - n * 9.5,
-              size: 8, font, color: rgb(0.08, 0.08, 0.08),
-            });
+            pintar(page, fit(font, linea, 8, n === 0 ? libre : CELDA_W - 12),
+              n === 0 ? x0 + 5 + anchoEtiqueta + 3 : x0 + 5,
+              yBase + PIE_H - 11 - n * 9.5, 8, font, rgb(0.08, 0.08, 0.08));
           });
         }
       }
@@ -532,9 +590,13 @@ const PDFGen = {
   /* Blob URL en lugar de data-URI: los data-URI grandes (plantilla A.A ~8MB)
      superan el límite del iframe en Chrome y la vista previa sale en blanco. */
   _lastPreviewURL: null,
-  async previewDataURL(formatKey, record) {
+  /* bytes del PDF para el visor propio (celulares y tablets) */
+  async previewBytes(formatKey, record) {
     const doc = await build(formatKey, record);
-    const bytes = await doc.save();
+    return doc.save();
+  },
+  async previewDataURL(formatKey, record) {
+    const bytes = await this.previewBytes(formatKey, record);
     if (this._lastPreviewURL) URL.revokeObjectURL(this._lastPreviewURL);
     this._lastPreviewURL = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     return this._lastPreviewURL;
