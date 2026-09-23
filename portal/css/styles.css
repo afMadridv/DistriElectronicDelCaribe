@@ -30,6 +30,14 @@ body {
 }
 .hidden { display: none !important; }
 
+/* aviso cuando el portal se abre con doble clic (file://) */
+.aviso-archivo {
+  position: sticky; top: 0; z-index: 60;
+  padding: 10px 16px; text-align: center;
+  background: var(--danger); color: var(--white);
+  font-size: 13px; font-weight: 600;
+}
+
 /* ---------- Buttons ---------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;

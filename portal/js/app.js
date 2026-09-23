@@ -20,7 +20,20 @@
     el.textContent = msg;
     el.className = `toast ${type}`;
     clearTimeout(el._t);
-    el._t = setTimeout(() => el.classList.add("hidden"), 2600);
+    // los errores se quedan más tiempo: en 2,6 s no alcanzaban a leerse
+    el._t = setTimeout(() => el.classList.add("hidden"), type === "error" ? 8000 : 2600);
+  }
+
+  /* fetch solo dice «Failed to fetch» (Chrome), «Load failed» (Safari) o
+     «NetworkError…» (Firefox) cuando la petición ni siquiera llegó. */
+  function esErrorDeRed(e) {
+    return /failed to fetch|load failed|networkerror|network request failed/i
+      .test(String((e && e.message) || e || ""));
+  }
+
+  function mensajeError(e) {
+    if (esErrorDeRed(e)) return "no hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.";
+    return (e && e.message) || "error desconocido.";
   }
 
   function showConfirm(title, text, okLabel = "Eliminar") {
@@ -51,6 +64,13 @@
      ============================================================ */
   async function boot() {
     if (Store.isDemo) $("#demo-hint").classList.remove("hidden");
+    if (location.protocol === "file:") {
+      const aviso = document.createElement("div");
+      aviso.className = "aviso-archivo";
+      aviso.textContent = "Abriste el portal como archivo (doble clic en index.html). Así el navegador " +
+        "no deja cargar las plantillas y al guardar sale «Failed to fetch». Ábrelo desde su dirección web.";
+      document.body.prepend(aviso);
+    }
     let profile = null;
     try { profile = await Store.init(); }
     catch (e) { console.error(e); }
@@ -616,7 +636,7 @@
       }
     } catch (e) {
       console.error("preview:", e);
-      aviso.textContent = "No se pudo generar la vista previa: " + (e.message || "");
+      aviso.textContent = "No se pudo generar la vista previa: " + mensajeError(e);
       aviso.classList.remove("hidden");
       toast("No se pudo generar la vista previa.", "error");
     }
@@ -664,19 +684,30 @@
     const btn = $("#generate-btn");
     btn.disabled = true;
     $("#save-status").textContent = "Guardando…";
+    /* etapa en curso: así el error dice qué falló y, si el registro ya
+       quedó guardado, no se le hace creer al usuario que se perdió */
+    let etapa = "fotos";
+    let guardado = null;
     try {
       const data = collectData();
 
-      // sube imágenes nuevas (dataURL) al almacenamiento
+      /* sube imágenes nuevas (dataURL) al almacenamiento, de una en una:
+         en datos móviles, subirlas todas a la vez hacía que alguna se
+         cortara y el guardado entero fallaba con «Failed to fetch» */
       for (const f of format.fields) {
         if (f.type === "images" && Array.isArray(data[f.key])) {
-          data[f.key] = await Promise.all(data[f.key].map(async (foto) => ({
-            src: String(foto.src).startsWith("data:") ? await Store.uploadImage(foto.src) : foto.src,
-            desc: foto.desc || "",
-          })));
+          const fotos = [];
+          for (const foto of data[f.key]) {
+            fotos.push({
+              src: String(foto.src).startsWith("data:") ? await subirFoto(foto.src) : foto.src,
+              desc: foto.desc || "",
+            });
+          }
+          data[f.key] = fotos;
         }
       }
 
+      etapa = "guardar";
       let record;
       if (editingRecord) {
         record = await Store.updateCotizacion(editingRecord.id, data);
@@ -688,8 +719,10 @@
         $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
       }
+      guardado = record;
 
       if (download) {
+        etapa = "pdf";
         const rec = await Store.hydrateImages(record);
         await PDFGen.download(currentFormat, rec, pedirNombre(currentFormat, rec));
       }
@@ -698,12 +731,36 @@
       toast(download ? `PDF ${record.numero} generado y guardado.` : `Cotización ${record.numero} guardada.`);
       return true;
     } catch (e) {
-      console.error(e);
+      console.error(`guardar (${etapa}):`, e);
+      if (guardado) {
+        // el registro sí quedó en el historial; solo falló el PDF
+        formDirty = false;
+        $("#save-status").textContent = "✓ Guardado en el historial";
+        toast(`${guardado.numero} se guardó, pero no se pudo generar el PDF: ${mensajeError(e)}`, "error");
+        return true;
+      }
       $("#save-status").textContent = "";
-      toast(e.message || "Error al generar el PDF.", "error");
+      const que = etapa === "fotos" ? "subir las fotos" : "guardar";
+      /* si se cortó la red al crear, pudo haber llegado al servidor:
+         se avisa para no terminar con el mismo reporte dos veces */
+      const extra = etapa === "guardar" && !editingRecord && esErrorDeRed(e)
+        ? " Antes de reintentar, revisa en el Historial si ya aparece." : "";
+      toast(`No se pudo ${que}: ${mensajeError(e)}${extra}`, "error");
       return false;
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  /* Reintenta la subida si se cortó la red (hasta 3 intentos). Cada intento
+     usa una ruta nueva, así que no choca con uno anterior a medias. */
+  async function subirFoto(src) {
+    for (let intento = 1; ; intento++) {
+      try { return await Store.uploadImage(src); }
+      catch (e) {
+        if (intento >= 3 || !esErrorDeRed(e)) throw e;
+        await new Promise((r) => setTimeout(r, 1500 * intento));
+      }
     }
   }
 

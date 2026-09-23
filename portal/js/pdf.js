@@ -33,7 +33,14 @@ async function fetchTemplate(file, baseUrl) {
   if (isNode) {
     bytes = require("fs").readFileSync((baseUrl || "") + file);
   } else {
-    const res = await fetch("plantillas/" + encodeURIComponent(file));
+    /* Abierto con doble clic (file://) el navegador bloquea fetch y lo único
+       que dice es «Failed to fetch»: se explica el motivo real. */
+    if (location.protocol === "file:") {
+      throw new Error("el portal está abierto como archivo (doble clic en index.html) y el navegador no deja cargar las plantillas. Ábrelo desde su dirección web.");
+    }
+    let res;
+    try { res = await fetch("plantillas/" + encodeURIComponent(file)); }
+    catch (e) { throw new Error("sin conexión: no se pudo descargar la plantilla " + file + "."); }
     if (!res.ok) throw new Error("No se pudo cargar la plantilla " + file);
     bytes = await res.arrayBuffer();
   }
