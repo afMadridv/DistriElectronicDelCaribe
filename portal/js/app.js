@@ -630,12 +630,13 @@
           label.className = "field";
           label.dataset.campo = f.key;
           label.innerHTML = `<span>${f.label}${f.required ? " *" : ""}</span>
-            <textarea id="f-${f.key}" ${f.required ? "required" : ""}>${escapeHtml(val || "")}</textarea>`;
-          container(false).appendChild(label);
+            <textarea id="f-${f.key}" ${f.required ? "required" : ""}
+              placeholder="${escapeHtml(f.placeholder || "")}">${escapeHtml(val || "")}</textarea>`;
+          container(f.half).appendChild(label);
           break;
         }
         case "items":
-          container(false).appendChild(buildItemsField(f, val));
+          container(f.half).appendChild(buildItemsField(f, val));
           break;
         case "checklist":
           container(false).appendChild(buildChecklistField(f, val));
@@ -707,7 +708,8 @@
     wrap.dataset.withPrice = f.withPrice ? "1" : "";
     if (medidas) wrap.classList.add("items-medidas");
     wrap.innerHTML = `
-      ${f.label && medidas ? `<span>${escapeHtml(f.label)}</span>` : ""}
+      ${f.label && (medidas || f.half) ? `<span>${escapeHtml(f.label)}</span>` : ""}
+      ${f.hint ? `<p class="field-hint">${escapeHtml(f.hint)}</p>` : ""}
       ${f.withBank ? `<p class="field-hint">Elige el banco de cada batería; la fila nueva sigue en el mismo banco de la anterior. La numeración va sola.</p>` : ""}
       ${medidas ? `<p class="field-hint">Escribe solo los números: ${medidas.map((m) => escapeHtml(m.unidad)).join(" y ")} los pone el formato.</p>` : ""}
       <table class="items-table">

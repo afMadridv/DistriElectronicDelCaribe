@@ -283,6 +283,21 @@ async function build(formatKey, record, opts = {}) {
     }
   }
 
+  /* retoques fijos sobre la plantilla (p. ej. partir una columna en dos):
+     tapa en blanco, líneas y rótulos en negro, como si fueran del formato */
+  for (const pa of cfg.parches || []) {
+    const pg = P(pa.page);
+    for (const [x, y, w, h] of pa.blanco || []) pg.drawRectangle({ x, y, width: w, height: h, color: rgb(1, 1, 1) });
+    for (const [x1, y1, x2, y2, g] of pa.lineas || []) {
+      pg.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: g || 0.8, color: rgb(0, 0, 0) });
+    }
+    for (const r of pa.rotulos || []) {
+      const s = r.size || 8;
+      const w = bold.widthOfTextAtSize(r.t, s);
+      pg.drawText(r.t, { x: r.x0 + (r.x1 - r.x0 - w) / 2, y: r.y, size: s, font: bold, color: rgb(0, 0, 0) });
+    }
+  }
+
   /* textos simples; join une varios campos en una misma línea y src
      permite repetir el mismo dato en otra página (p. ej. «HOJA _ DE _») */
   for (const t of cfg.text || []) {
@@ -332,7 +347,9 @@ async function build(formatKey, record, opts = {}) {
      el número del ítem se escribe solo en la primera fila, así una misma
      idea no gasta varios números. */
   for (const it of cfg.items || []) {
-    const rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim());
+    let rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim());
+    // sin filas escritas, la tabla dice algo («Ninguno») en vez de quedar en blanco
+    if (!rows.length && it.vacio) rows = [{ cant: "", descripcion: it.vacio }];
     const size = it.size || 8;
     let fila = 0;
     for (const r of rows) {

@@ -307,6 +307,9 @@ img, svg, canvas, video, iframe { max-width: 100%; }
 }
 .form-section-title:first-child { margin-top: 0; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+/* tabla y texto lado a lado (material utilizado | anotaciones) */
+.form-row > .field:has(textarea) textarea { min-height: 10rem; }
+.form-row > .field .items-table { min-width: 0; }
 .form-actions { display: flex; align-items: center; gap: 14px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--gray-100); }
 .save-status { font-size: 13px; color: var(--ok); font-weight: 600; }
 

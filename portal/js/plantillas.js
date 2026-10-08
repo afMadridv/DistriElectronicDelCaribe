@@ -44,7 +44,26 @@ const PLANTILLAS = {
     ],
     items: [
       { key: "actividades", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 642.3, step: 12, max: 16, descMaxW: 356, size: 8 },
-      { key: "materiales", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 410.2, step: 12, max: 18, descMaxW: 356, size: 8 },
+      // material utilizado en la mitad izquierda de «DESCRIPCIÓN»; vacío = «Ninguno»
+      { key: "materiales", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 410.2, step: 12, max: 18, descMaxW: 174, size: 8, vacio: "Ninguno" },
+    ],
+    // anotaciones en la mitad derecha, renglón por renglón de la tabla
+    wrap: [
+      { key: "anotaciones", page: 0, x: 335.5, y0: 410.2, lh: 12, maxW: 172, maxLines: 18, size: 8 },
+    ],
+    /* la columna «DESCRIPCIÓN» se parte en dos: se tapa su rótulo, se traza
+       la línea del medio (x 331.3, del borde de arriba al de abajo de la
+       tabla) y se rotulan las dos mitades */
+    parches: [
+      {
+        page: 0,
+        blanco: [[149.6, 419.6, 363.4, 11]],
+        lineas: [[331.3, 431.1, 331.3, 203, 0.8]],
+        rotulos: [
+          { t: "MATERIAL UTILIZADO", x0: 148.9, x1: 331.3, y: 421.8, size: 8.5 },
+          { t: "ANOTACIONES", x0: 331.3, x1: 513.8, y: 421.8, size: 8.5 },
+        ],
+      },
     ],
     sigs: [
       { key: "firma_funcionario", page: 0, cx: 160, y: 149, h: 26, maxW: 130 },
