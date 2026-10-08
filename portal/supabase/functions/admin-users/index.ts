@@ -55,9 +55,20 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceKey);
     const { data: profile } = await admin
       .from("profiles").select("role").eq("id", user.id).single();
-    if (!profile || profile.role !== "jefe") {
-      return json({ error: "Solo los Jefes pueden gestionar usuarios." }, 403);
+    if (!profile || !["jefe", "administrador"].includes(profile.role)) {
+      return json({ error: "Solo los Jefes y el Administrador pueden gestionar usuarios." }, 403);
     }
+
+    /* Reglas del Administrador: uno solo por portal; solo él modifica su
+       cuenta; no cambia de rol; no se elimina desde el portal (solo desde
+       el panel de Supabase). La base de datos también lo impide. */
+    const ROLES = ["trabajador", "jefe", "administrador"];
+    const rolDe = async (id: string) =>
+      (await admin.from("profiles").select("role").eq("id", id).maybeSingle()).data?.role ?? null;
+    const hayAdministrador = async () =>
+      ((await admin.from("profiles").select("id", { count: "exact", head: true })
+        .eq("role", "administrador")).count ?? 0) > 0;
+    const YA_HAY = "Ya hay un Administrador en el portal: solo puede haber uno.";
 
     // 2. Ejecutar la acción
     const body = await req.json();
@@ -69,6 +80,8 @@ Deno.serve(async (req) => {
       if (String(password).length < 6) {
         return json({ error: "La contraseña debe tener al menos 6 caracteres." }, 400);
       }
+      if (role && !ROLES.includes(role)) return json({ error: "Rol no válido." }, 400);
+      if (role === "administrador" && await hayAdministrador()) return json({ error: YA_HAY }, 400);
       const { data: created, error } = await admin.auth.admin.createUser({
         email, password, email_confirm: true,
       });
@@ -81,7 +94,9 @@ Deno.serve(async (req) => {
         // Sin perfil el usuario no puede entrar y no sale en la lista:
         // se deshace la creación para no dejar una cuenta fantasma.
         await admin.auth.admin.deleteUser(created.user.id);
-        return json({ error: pErr.message }, 400);
+        // dos Jefes creando Administrador a la vez: el índice único frena al segundo
+        const msg = /profiles_un_administrador/.test(pErr.message) ? YA_HAY : pErr.message;
+        return json({ error: msg }, 400);
       }
       return json({ ok: true, id: created.user.id });
     }
@@ -92,9 +107,20 @@ Deno.serve(async (req) => {
       if (password && String(password).length < 6) {
         return json({ error: "La contraseña debe tener al menos 6 caracteres." }, 400);
       }
+      if (role && !ROLES.includes(role)) return json({ error: "Rol no válido." }, 400);
+      const rolActual = await rolDe(id);
+      if (!rolActual) return json({ error: "Usuario no encontrado." }, 404);
+      if (rolActual === "administrador") {
+        if (id !== user.id) return json({ error: "Solo el Administrador puede modificar su propia cuenta." }, 403);
+        if (role && role !== "administrador") {
+          return json({ error: "El rol de Administrador no se cambia desde el portal." }, 400);
+        }
+      } else if (role === "administrador" && await hayAdministrador()) {
+        return json({ error: YA_HAY }, 400);
+      }
       // Un Jefe no puede quitarse a sí mismo el rol: si es el último,
       // nadie podría volver a gestionar usuarios desde el portal.
-      if (id === user.id && role && role !== "jefe") {
+      if (id === user.id && rolActual === "jefe" && role && role !== "jefe") {
         return json({ error: "No puedes quitarte a ti mismo el rol de Jefe." }, 400);
       }
 
@@ -114,7 +140,10 @@ Deno.serve(async (req) => {
       if (role) patch.role = role;
       if (Object.keys(patch).length) {
         const { error: pErr } = await admin.from("profiles").update(patch).eq("id", id);
-        if (pErr) return json({ error: pErr.message }, 400);
+        if (pErr) {
+          const msg = /profiles_un_administrador/.test(pErr.message) ? YA_HAY : pErr.message;
+          return json({ error: msg }, 400);
+        }
       }
       return json({ ok: true });
     }
@@ -123,6 +152,9 @@ Deno.serve(async (req) => {
       const { id } = body;
       if (!id) return json({ error: "Falta el id." }, 400);
       if (id === user.id) return json({ error: "No puedes eliminar tu propio usuario." }, 400);
+      if (await rolDe(id) === "administrador") {
+        return json({ error: "El Administrador solo se puede eliminar desde el panel de Supabase." }, 403);
+      }
       const { error } = await admin.auth.admin.deleteUser(id);
       if (error) return json({ error: error.message }, 400);
       return json({ ok: true });

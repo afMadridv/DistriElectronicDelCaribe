@@ -14,6 +14,15 @@ window.APP_CONFIG = {
      Plan gratis: 1 GB de archivos y 500 MB de base de datos.
      Si se cambia a Pro: ARCHIVOS_MB: 102400, BASE_DATOS_MB: 8192. */
   PLAN: { ARCHIVOS_MB: 1024, BASE_DATOS_MB: 500 },
+  /* Notificaciones push con el portal cerrado: clave PÚBLICA VAPID.
+     Se genera con  npx web-push generate-vapid-keys  (la privada va
+     solo en los secretos de Supabase, nunca aquí). Vacía = sin push;
+     los avisos siguen llegando mientras el portal esté abierto. */
+  VAPID_PUBLIC_KEY: "BMbnzcraJVFBM6AZC-xuxtjJBVDjWcrCLBrAcER8DI6kM44Lcs8MnfJzpKbUhtxiUQFyo2N4fzrvmlDSSyCdpnw",
+  /* Llamadas: servidores TURN opcionales para redes muy cerradas
+     (algunas móviles o corporativas). Ejemplo:
+     [{ urls: "turn:turn.ejemplo.com:3478", username: "u", credential: "c" }] */
+  ICE_SERVERS: [],
   COMPANY: {
     name: "DISTRIELECTRONIC DEL CARIBE LTDA.",
     nit: "NIT 900.278.185-2",

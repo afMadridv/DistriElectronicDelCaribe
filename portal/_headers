@@ -2,4 +2,11 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Permissions-Policy: geolocation=(), microphone=(self), camera=()
+
+/sw.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/manifest.json
+  Content-Type: application/manifest+json; charset=utf-8
+  Cache-Control: no-cache, max-age=0, must-revalidate

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DistriElectronic del Caribe">
+  <!-- Ícono del portal: la «D» de la marca con un rayo, sobre el amarillo corporativo -->
+  <rect width="512" height="512" rx="112" fill="#FFC400"/>
+  <path fill="#141414" fill-rule="evenodd" d="M132 104h124c95 0 160 63 160 152s-65 152-160 152H132zM198 166v180h54c56 0 92-36 92-90s-36-90-92-90z"/>
+  <path fill="#141414" d="M284 196L222 272H258L244 318L306 240H268Z"/>
+</svg>

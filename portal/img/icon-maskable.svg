@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DistriElectronic del Caribe">
+  <!-- Versión «maskable»: fondo a sangre y el dibujo dentro de la zona
+       segura (círculo del 80 %), para que Android lo recorte sin cortar la D -->
+  <rect width="512" height="512" fill="#FFC400"/>
+  <g transform="translate(256 256) scale(0.78) translate(-274 -256)">
+    <path fill="#141414" fill-rule="evenodd" d="M132 104h124c95 0 160 63 160 152s-65 152-160 152H132zM198 166v180h54c56 0 92-36 92-90s-36-90-92-90z"/>
+    <path fill="#141414" d="M284 196L222 272H258L244 318L306 240H268Z"/>
+  </g>
+</svg>

@@ -59,6 +59,12 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  /* Jefe y Administrador gestionan el portal: usuarios, auditoría, llamadas */
+  const esGestor = Store.esGestor;
+  const ROLES = { trabajador: "Trabajador", jefe: "Jefe", administrador: "Administrador" };
+  const rolTexto = (r) => ROLES[r] || r;
+  const VISTAS = { generar: "Generando formatos", historial: "En el historial", usuarios: "Gestionando usuarios" };
+
   /* ============================================================
      ARRANQUE Y SESIÓN
      ============================================================ */
@@ -82,12 +88,46 @@
     $("#view-login").classList.add("hidden");
     $("#app").classList.remove("hidden");
     $("#user-name").textContent = profile.name;
-    $("#user-role").textContent = profile.role;
+    $("#user-role").textContent = rolTexto(profile.role);
     $("#user-avatar").textContent = (profile.name || "?").trim().charAt(0).toUpperCase();
-    $("#nav-usuarios").classList.toggle("hidden", profile.role !== "jefe");
+    $("#nav-usuarios").classList.toggle("hidden", !esGestor(profile));
     renderFormatPicker();
     switchView("generar");
     vigilarAlmacenamiento();
+    iniciarTiempoReal(profile);
+  }
+
+  /* Presencia, notificaciones, llamadas y auditoría de inicio de sesión.
+     Nada de esto bloquea la entrada: si falla, el portal sigue normal. */
+  async function iniciarTiempoReal(p) {
+    const disp = Dispositivo.info();
+    Tiempo.unirsePortal({
+      uid: p.id, nombre: p.name, rol: p.role,
+      dispositivo: `${disp.tipo} · ${disp.navegador}`, vista: VISTAS.generar, desde: Date.now(),
+    });
+    NotificationService.iniciar(p);
+    Llamadas.iniciar(p);
+
+    // abierto desde un acceso directo del ícono o desde una notificación
+    const inicio = PWA.parametrosInicio();
+    if (inicio.registro) abrirRegistro(inicio.registro);
+    else if (inicio.vista && VISTAS[inicio.vista] && (inicio.vista !== "usuarios" || esGestor(p))) switchView(inicio.vista);
+    if (p.sinConexion) toast("Sin conexión: entraste con tu última sesión. Para guardar necesitas internet.", "error");
+
+    let reg = { nuevo: false, otros: 0 };
+    try { reg = await Store.registrarDispositivo(disp); }
+    catch (e) { console.debug("dispositivo:", e.message); }
+
+    // el Administrador ve cuándo entra cada trabajador (una vez por sesión del navegador)
+    const clave = `dec_ingreso:${p.id}`;
+    if (!sessionStorage.getItem(clave)) {
+      sessionStorage.setItem(clave, "1");
+      NotificationService.registrar("ingreso", { detalle: { ...disp, nuevo: reg.nuevo } });
+    }
+    // alerta de seguridad en los otros equipos de un Jefe/Administrador
+    if (esGestor(p) && reg.nuevo && reg.otros > 0) {
+      Store.registrarEvento("nuevo_dispositivo", { detalle: disp }).catch((e) => console.debug("seguridad:", e.message));
+    }
   }
 
   $("#login-form").addEventListener("submit", async (e) => {
@@ -114,15 +154,23 @@
   });
 
   $("#logout-btn").addEventListener("click", async () => {
-    const ok = await showConfirm("Cerrar sesión", "¿Seguro que deseas salir del portal?", "Cerrar sesión");
+    const enLlamada = Llamadas.enLlamada();
+    const ok = await showConfirm("Cerrar sesión",
+      enLlamada ? "Tienes una llamada en curso: si sales, se corta. ¿Cerrar sesión de todos modos?"
+        : "¿Seguro que deseas salir del portal?", "Cerrar sesión");
     if (!ok) return;
+    Colaboracion.salir();
+    Llamadas.detener();
+    await NotificationService.cerrarSesion().catch(() => {});
+    Tiempo.salirTodo();
     await Store.logout();
     location.reload();
   });
 
-  /* aviso nativo al recargar o cerrar la pestaña con cambios sin guardar */
+  /* aviso nativo al recargar o cerrar la pestaña con cambios sin guardar
+     o con una llamada en curso */
   window.addEventListener("beforeunload", (e) => {
-    if (formDirty && !$("#form-wrap").classList.contains("hidden")) {
+    if ((formDirty && !$("#form-wrap").classList.contains("hidden")) || Llamadas.enLlamada()) {
       e.preventDefault();
       e.returnValue = "";
     }
@@ -151,17 +199,43 @@
      NAVEGACIÓN
      ============================================================ */
   function switchView(view) {
-    $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+    $$(".nav-item[data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
     ["generar", "historial", "usuarios"].forEach((v) =>
       $(`#view-${v}`).classList.toggle("hidden", v !== view));
     if (view === "historial") renderHistorial();
     if (view === "usuarios") renderUsers();
+    // los Jefes ven en qué parte del portal está cada quien (lista de llamadas)
+    if (view !== "generar" || $("#form-wrap").classList.contains("hidden")) Tiempo.actualizarPortal({ vista: VISTAS[view] });
   }
 
-  $$(".nav-item").forEach((b) => b.addEventListener("click", () => {
+  $$(".nav-item[data-view]").forEach((b) => b.addEventListener("click", () => {
     abrirMenuCelular(false);
     guardExit(() => switchView(b.dataset.view));
   }));
+
+  /* Acciones que piden las notificaciones (botón «Abrir», clic en la
+     notificación del sistema, enlaces ?registro= del push) */
+  async function abrirRegistro(id) {
+    try {
+      const rec = await Store.getCotizacion(id);
+      if (rec && FORMATS[rec.format_type]) openForm(rec.format_type, rec);
+      else toast("Ese registro ya no existe o no tienes acceso.", "error");
+    } catch (e) { toast(`No se pudo abrir el registro: ${mensajeError(e)}`, "error"); }
+  }
+  window.App = {
+    irA: (vista) => { abrirMenuCelular(false); guardExit(() => switchView(vista)); },
+    abrirRegistro: (id) => guardExit(() => abrirRegistro(id)),
+    editarMiCuenta: () => {
+      const me = Store.getProfile();
+      if (!me || !esGestor(me)) return;
+      guardExit(async () => {
+        switchView("usuarios");
+        const users = await Store.listUsers().catch(() => []);
+        const yo = users.find((u) => u.id === me.id);
+        if (yo) openUserModal(yo, users);
+      });
+    },
+  };
 
   /* ============================================================
      MENÚ LATERAL
@@ -239,7 +313,7 @@
   async function actualizarAlmacenamiento() {
     const w = $("#storage-widget");
     const perfil = Store.getProfile();
-    if (!perfil || perfil.role !== "jefe") { w.classList.add("hidden"); return; }
+    if (!esGestor(perfil)) { w.classList.add("hidden"); return; }
     w.classList.remove("hidden");
     w.classList.add("cargando");
     const msg = $("#storage-msg");
@@ -287,10 +361,192 @@
 
   $("#back-to-formats").addEventListener("click", () => {
     guardExit(() => {
+      Colaboracion.salir();
       $("#form-wrap").classList.add("hidden");
       $("#format-picker").classList.remove("hidden");
       editingRecord = null;
+      currentFormat = null;
+      Tiempo.actualizarPortal({ vista: VISTAS.generar });
     });
+  });
+
+  /* ============================================================
+     CAMPOS: leer, escribir y avisar cambios
+     Lo usan el guardado, la edición en conjunto y la auditoría.
+     ============================================================ */
+  let itemsCtl = {};          // tablas: { campo: { poner(filas) } }
+  let fotosCtl = {};          // fotos: { campo: { pintar() } }
+  let calculadores = {};      // campo origen → [recalcular, …]
+  let firmasTocadas = new Set();
+  let aviseEdicion = false;   // «empezó a editar» se registra una sola vez
+
+  const campoDef = (clave) => currentFormat && FORMATS[currentFormat].fields.find((f) => f.key === clave);
+
+  /* valor de un campo; crudo=true deja las filas vacías de las tablas
+     (para que la otra persona vea la fila nueva antes de que se escriba) */
+  function valorCampo(f, crudo = false) {
+    switch (f.type) {
+      case "text": case "number": case "date": case "select": case "textarea": {
+        const el = $(`#f-${f.key}`);
+        return el ? (crudo ? el.value : el.value.trim()) : "";
+      }
+      case "items": {
+        const wrap = document.querySelector(`[data-items-key="${f.key}"]`);
+        const rows = [];
+        wrap.querySelectorAll("tbody tr").forEach((tr) => {
+          const item = { cant: tr.querySelector(".it-cant").value };
+          if (f.medidas) {
+            // solo el número; la unidad la pone el PDF
+            tr.querySelectorAll(".it-med").forEach((el) => { item[el.dataset.med] = el.value.trim(); });
+          } else {
+            item.descripcion = tr.querySelector(".it-desc").value.trim();
+          }
+          const banco = tr.querySelector(".it-banco");
+          if (banco) item.banco = Number(banco.value) || 1;
+          const precio = tr.querySelector(".it-precio");
+          if (precio) item.precio = precio.value;
+          const lleno = f.medidas ? f.medidas.some((m) => item[m.key]) : item.descripcion;
+          if (lleno || crudo) rows.push(item);
+        });
+        return rows;
+      }
+      case "checklist": {
+        const wrap = document.querySelector(`[data-checklist-key="${f.key}"]`);
+        const obj = {};
+        wrap.querySelectorAll("[data-chk-row]").forEach((sel) => {
+          if (sel.value) obj[sel.dataset.chkRow] = sel.value;
+        });
+        return obj;
+      }
+      case "images":
+        return [...(formImages[f.key] || [])];
+      case "signature": {
+        const s = signatures[f.key];
+        return s && s.drawn ? cropSignature(s.canvas) : null;
+      }
+      default:
+        return undefined;
+    }
+  }
+
+  /* escribe en el formulario un valor que llegó de otra persona
+     (si es igual a lo que ya hay, no hace nada ni marca cambios) */
+  function aplicarCampo(f, v) {
+    if (f.type === "signature") {
+      const pad = signatures[f.key];
+      if (!pad || (pad.fuente !== undefined && (pad.fuente || null) === (v || null))) return;
+    } else if (JSON.stringify(valorCampo(f, true) ?? null) === JSON.stringify(v ?? null)) return;
+    switch (f.type) {
+      case "text": case "number": case "date": case "select": case "textarea": {
+        const el = $(`#f-${f.key}`);
+        if (el && el.value !== (v ?? "")) el.value = v ?? "";
+        break;
+      }
+      case "items": if (itemsCtl[f.key]) itemsCtl[f.key].poner(v); break;
+      case "checklist": {
+        const wrap = document.querySelector(`[data-checklist-key="${f.key}"]`);
+        if (!wrap) break;
+        wrap.querySelectorAll("[data-chk-row]").forEach((sel) => { sel.value = (v || {})[sel.dataset.chkRow] || ""; });
+        break;
+      }
+      case "signature": if (signatures[f.key]) signatures[f.key].cargar(v || null); break;
+      default: break;   // las fotos se comparten al guardar
+    }
+    (calculadores[f.key] || []).forEach((fn) => fn());
+    formDirty = true;
+  }
+
+  /* Un campo cambió en esta pestaña: cambios pendientes, envío a quienes
+     editan el mismo formato y aviso de auditoría «empezó a editar». */
+  function cambioCampo(clave) {
+    formDirty = true;
+    const f = campoDef(clave);
+    if (!f) return;
+    if (f.type !== "images") Colaboracion.cambio(clave);
+    if (!aviseEdicion) {
+      aviseEdicion = true;
+      NotificationService.registrar("formato_editando", {
+        cotizacion_id: editingRecord ? editingRecord.id : null, detalle: resumenDoc(),
+      });
+    }
+  }
+
+  /* datos del formato para los avisos (sin información sensible) */
+  function resumenDoc(registro = editingRecord) {
+    const f = FORMATS[currentFormat];
+    const datos = registro ? registro.data || {} : {};
+    const vivo = (k) => { const el = $(`#f-${k}`); return el ? el.value.trim() : ""; };
+    return {
+      formato: f ? f.name : currentFormat,
+      numero: registro ? registro.numero : "",
+      no_doc: vivo("no_ott") || datos.no_ott || "",
+      cliente: vivo("cliente") || datos.cliente || "",
+    };
+  }
+
+  /* todo lo que se puede compartir en vivo (las fotos no) */
+  function instantanea() {
+    const out = {};
+    for (const f of FORMATS[currentFormat].fields) {
+      if (f.section || f.type === "images") continue;
+      out[f.key] = valorCampo(f, true);
+    }
+    return out;
+  }
+
+  /* otra persona guardó: se traen sus fotos y el número, sin perder las
+     fotos nuevas que esta pestaña aún no ha subido */
+  async function alGuardadoRemoto(info) {
+    if (!editingRecord || info.id !== editingRecord.id) return;
+    try {
+      const rec = await Store.getCotizacion(info.id);
+      if (!rec) return;
+      editingRecord = rec;
+      let pendientes = false;
+      for (const f of FORMATS[currentFormat].fields) {
+        if (f.type !== "images") continue;
+        const guardadas = (rec.data[f.key] || []).map((v) => (v && typeof v === "object") ? { src: v.src, desc: v.desc || "" } : { src: v, desc: "" });
+        const locales = (formImages[f.key] || []).filter((v) => String(v.src).startsWith("data:"));
+        pendientes = pendientes || locales.length > 0;
+        formImages[f.key] = [...guardadas, ...locales];
+        if (fotosCtl[f.key]) fotosCtl[f.key].pintar();
+      }
+      formDirty = pendientes;
+      $("#current-format-name").textContent = `Editando ${rec.numero} — ${FORMATS[currentFormat].name}`;
+      toast(`${info.por || "Otra persona"} guardó el formato.`);
+    } catch (e) { console.warn("guardado remoto:", e); }
+  }
+
+  /* contexto que usa colaboracion.js para leer y escribir este formulario */
+  function ctxColaboracion() {
+    return {
+      perfil: Store.getProfile(),
+      valor: (clave) => { const f = campoDef(clave); return f ? valorCampo(f, true) : null; },
+      aplicar: (clave, v) => { const f = campoDef(clave); if (f) aplicarCampo(f, v); },
+      instantanea,
+      aplicarInstantanea: (datos) => {
+        for (const [k, v] of Object.entries(datos)) { const f = campoDef(k); if (f && f.type !== "images") aplicarCampo(f, v); }
+      },
+      alGuardado: alGuardadoRemoto,
+      etiqueta: (clave) => { const f = campoDef(clave); return f ? f.label : clave; },
+      aviso: (texto, tipo) => toast(texto, tipo),
+    };
+  }
+
+  /* un solo listener para todo el formulario (se arma de nuevo con cada formato) */
+  const formEl = $("#dynamic-form");
+  formEl.addEventListener("input", (e) => {
+    const w = e.target.closest("[data-campo]");
+    if (w) cambioCampo(w.dataset.campo);
+    else schedulePreview();
+  });
+  formEl.addEventListener("focusin", (e) => {
+    const w = e.target.closest("[data-campo]");
+    Colaboracion.foco(w ? w.dataset.campo : null);
+  });
+  formEl.addEventListener("focusout", () => {
+    // si el foco salió del formulario, los demás dejan de ver la marca
+    setTimeout(() => { if (!formEl.contains(document.activeElement)) Colaboracion.foco(null); }, 0);
   });
 
   /* ============================================================
@@ -301,6 +557,11 @@
     editingRecord = record;
     formImages = {};
     signatures = {};
+    itemsCtl = {};
+    fotosCtl = {};
+    calculadores = {};
+    firmasTocadas = new Set();
+    aviseEdicion = false;
     const format = FORMATS[formatKey];
     const data = record ? record.data : {};
 
@@ -344,6 +605,7 @@
         case "text": case "number": case "date": {
           const label = document.createElement("label");
           label.className = "field";
+          label.dataset.campo = f.key;
           label.innerHTML = `<span>${f.label}${f.required ? " *" : ""}</span>
             <input type="${f.type}" id="f-${f.key}" ${f.required ? "required" : ""}
               ${f.calc ? "readonly tabindex='-1'" : ""}
@@ -354,6 +616,7 @@
         case "select": {
           const label = document.createElement("label");
           label.className = "field";
+          label.dataset.campo = f.key;
           label.innerHTML = `<span>${f.label}</span>
             <select id="f-${f.key}">
               <option value="">— Seleccionar —</option>
@@ -365,6 +628,7 @@
         case "textarea": {
           const label = document.createElement("label");
           label.className = "field";
+          label.dataset.campo = f.key;
           label.innerHTML = `<span>${f.label}${f.required ? " *" : ""}</span>
             <textarea id="f-${f.key}" ${f.required ? "required" : ""}>${escapeHtml(val || "")}</textarea>`;
           container(false).appendChild(label);
@@ -406,6 +670,8 @@
         destino.value = Number.isFinite(n) ? String(Math.round(n * f.calc.factor * 100) / 100) : "";
       };
       origen.addEventListener("input", calcular);
+      // también cuando el valor llega de otra persona que edita el mismo formato
+      (calculadores[f.calc.from] ||= []).push(calcular);
       // al abrir un reporte guardado se recalcula con la regla vigente
       if (origen.value.trim()) calcular();
     }
@@ -414,8 +680,15 @@
     const fechaInput = $("#f-fecha");
     if (fechaInput && !fechaInput.value) fechaInput.value = new Date().toISOString().slice(0, 10);
 
-    form.addEventListener("input", schedulePreview);
     formDirty = false;
+
+    /* auditoría (solo trabajadores) y edición en conjunto (formatos guardados) */
+    NotificationService.registrar("formato_abierto", {
+      cotizacion_id: record ? record.id : null, detalle: { ...resumenDoc(record), nuevo: !record },
+    });
+    Tiempo.actualizarPortal({ vista: record ? `Editando ${resumenDoc(record).no_doc || record.numero}` : `Llenando: ${format.name}` });
+    if (record) Colaboracion.unirse(record, ctxColaboracion());
+    else Colaboracion.salir();
     $("#preview-panel").classList.add("hidden");
     $("#pdf-preview").removeAttribute("src");
     $("#pdf-canvas").replaceChildren();
@@ -430,6 +703,7 @@
     const wrap = document.createElement("div");
     wrap.className = "field";
     wrap.dataset.itemsKey = f.key;
+    wrap.dataset.campo = f.key;
     wrap.dataset.withPrice = f.withPrice ? "1" : "";
     if (medidas) wrap.classList.add("items-medidas");
     wrap.innerHTML = `
@@ -489,13 +763,43 @@
         tr.remove();
         renumerar();
         updateTotal();
-        schedulePreview();
+        cambioCampo(f.key);
       });
       const selBanco = tr.querySelector(".it-banco");
-      if (selBanco) selBanco.addEventListener("change", () => { renumerar(); schedulePreview(); });
+      if (selBanco) selBanco.addEventListener("change", () => { renumerar(); cambioCampo(f.key); });
       tbody.appendChild(tr);
       return tr;
     }
+
+    /* reemplaza las filas con las que llegaron de otra persona; si aquí
+       se estaba escribiendo en una celda, el cursor vuelve a esa celda */
+    function poner(filas) {
+      const activo = tbody.contains(document.activeElement) ? document.activeElement : null;
+      let donde = null;
+      if (activo) {
+        const tr = activo.closest("tr");
+        donde = {
+          fila: [...tbody.children].indexOf(tr),
+          clase: [...activo.classList].find((c) => c.startsWith("it-")),
+          med: activo.dataset.med || null,
+          cursor: activo.selectionStart ?? null,
+        };
+      }
+      tbody.innerHTML = "";
+      (Array.isArray(filas) && filas.length ? filas : [{}]).forEach(addRow);
+      renumerar();
+      updateTotal();
+      if (donde) {
+        const tr = tbody.children[Math.min(donde.fila, tbody.children.length - 1)];
+        const sel = donde.med ? `[data-med="${donde.med}"]` : `.${donde.clase}`;
+        const el = tr && tr.querySelector(sel);
+        if (el) {
+          el.focus({ preventScroll: true });
+          if (donde.cursor != null && el.setSelectionRange) { try { el.setSelectionRange(donde.cursor, donde.cursor); } catch { /* select */ } }
+        }
+      }
+    }
+    itemsCtl[f.key] = { poner };
 
     /* banco de la última fila: la fila nueva sigue en ese banco (1, 1, 2,
        2, 2…) en vez de volver siempre al 1 */
@@ -532,7 +836,7 @@
     wrap.querySelector(".add-row-btn").addEventListener("click", () => {
       const tr = addRow(f.withBank ? { banco: ultimoBanco() } : {});
       renumerar();
-      schedulePreview();
+      cambioCampo(f.key);
       // listo para escribir la siguiente medida sin tocar la casilla
       if (medidas) tr.querySelector(".it-med").focus();
     });
@@ -545,6 +849,7 @@
     const wrap = document.createElement("div");
     wrap.className = "field checklist";
     wrap.dataset.checklistKey = f.key;
+    wrap.dataset.campo = f.key;
     wrap.innerHTML = f.rows.map((r) => `
       <div class="chk-row">
         <span class="chk-label">${escapeHtml(r.label)}</span>
@@ -560,9 +865,11 @@
   function buildImagesField(f) {
     const wrap = document.createElement("div");
     wrap.className = "field";
+    wrap.dataset.campo = f.key;
     wrap.innerHTML = `
       <span>${f.label}</span>
-      <p class="field-hint">Van 6 fotos por página, numeradas. La descripción sale como «Figura N.» debajo de cada una.</p>
+      <p class="field-hint">Van 6 fotos por página, numeradas. La descripción sale como «Figura N.» debajo de cada una.
+        Si otra persona edita este formato contigo, las fotos nuevas le aparecen al guardar.</p>
       <div class="img-thumbs"></div>
       <div class="img-drop"><span class="drop-icon">${window.ICONS.camera}</span> Haz clic para agregar imágenes (se comprimen automáticamente)</div>
       <input type="file" accept="image/*" multiple class="hidden img-input" />`;
@@ -624,6 +931,7 @@
     });
 
     renderThumbs();
+    fotosCtl[f.key] = { pintar: renderThumbs };
     return wrap;
   }
 
@@ -654,7 +962,10 @@
       pincel();
       pad.drawn = true;
     };
+    /* fuente: la imagen que se cargó (undefined si se firmó a mano aquí);
+       sirve para no recargar la misma firma que llega de otra persona */
     pad.cargar = (src) => new Promise((ok) => {
+      pad.fuente = src || null;
       if (!src) { pad.limpiar(); ok(); return; }
       const img = new Image();
       img.onload = () => { pad.pintarImagen(img); ok(); };
@@ -686,7 +997,7 @@
       pad.drawn = true;
     });
     const stop = () => {
-      if (drawing) { drawing = false; alCambiar(); }
+      if (drawing) { drawing = false; pad.fuente = undefined; alCambiar(); }
     };
     canvas.addEventListener("pointerup", stop);
     canvas.addEventListener("pointerleave", stop);
@@ -732,19 +1043,23 @@
   function buildSignatureField(f, existing, deUsuario = false) {
     const wrap = document.createElement("div");
     wrap.className = "field";
+    wrap.dataset.campo = f.key;
     wrap.innerHTML = `
       <span>${f.label}</span>
       <canvas class="sig-canvas" width="600" height="180"></canvas>
       <div class="sig-actions"><button type="button" class="btn btn-ghost btn-sm sig-clear">Limpiar firma</button></div>
       ${deUsuario ? '<small class="field-hint">Se puso tu firma guardada. Si quieres, límpiala y firma de nuevo.</small>' : ""}`;
 
-    const pad = crearPadFirma(wrap.querySelector("canvas"), schedulePreview);
+    // firmar aquí cuenta para el aviso «completó y firmó»
+    const pad = crearPadFirma(wrap.querySelector("canvas"), () => { firmasTocadas.add(f.key); cambioCampo(f.key); });
     signatures[f.key] = pad;
+    pad.fuente = existing || null;
     if (existing) pad.cargar(existing);
 
     wrap.querySelector(".sig-clear").addEventListener("click", () => {
       pad.limpiar();
-      schedulePreview();
+      pad.fuente = null;
+      cambioCampo(f.key);
     });
     return wrap;
   }
@@ -780,55 +1095,12 @@
   }
 
   function collectData() {
-    const format = FORMATS[currentFormat];
     const data = {};
-    for (const f of format.fields) {
+    const SIMPLES = ["text", "number", "date", "select", "textarea"];
+    for (const f of FORMATS[currentFormat].fields) {
       if (f.section) continue;
-      switch (f.type) {
-        case "text": case "number": case "date": case "select": case "textarea": {
-          const el = $(`#f-${f.key}`);
-          if (el) data[f.key] = el.value.trim();
-          break;
-        }
-        case "items": {
-          const wrap = document.querySelector(`[data-items-key="${f.key}"]`);
-          const rows = [];
-          wrap.querySelectorAll("tbody tr").forEach((tr) => {
-            const item = { cant: tr.querySelector(".it-cant").value };
-            if (f.medidas) {
-              // solo el número; la unidad la pone el PDF
-              tr.querySelectorAll(".it-med").forEach((el) => { item[el.dataset.med] = el.value.trim(); });
-            } else {
-              item.descripcion = tr.querySelector(".it-desc").value.trim();
-            }
-            const banco = tr.querySelector(".it-banco");
-            if (banco) item.banco = Number(banco.value) || 1;
-            const precio = tr.querySelector(".it-precio");
-            if (precio) item.precio = precio.value;
-            const lleno = f.medidas ? f.medidas.some((m) => item[m.key]) : item.descripcion;
-            if (lleno) rows.push(item);
-          });
-          data[f.key] = rows;
-          break;
-        }
-        case "checklist": {
-          const wrap = document.querySelector(`[data-checklist-key="${f.key}"]`);
-          const obj = {};
-          wrap.querySelectorAll("[data-chk-row]").forEach((sel) => {
-            if (sel.value) obj[sel.dataset.chkRow] = sel.value;
-          });
-          data[f.key] = obj;
-          break;
-        }
-        case "images":
-          data[f.key] = [...(formImages[f.key] || [])];
-          break;
-        case "signature": {
-          const s = signatures[f.key];
-          data[f.key] = s && s.drawn ? cropSignature(s.canvas) : null;
-          break;
-        }
-      }
+      if (SIMPLES.includes(f.type) && !$(`#f-${f.key}`)) continue;
+      data[f.key] = valorCampo(f);
     }
     return data;
   }
@@ -958,24 +1230,38 @@
       if (editingRecord) {
         record = await Store.updateCotizacion(editingRecord.id, data);
         editingRecord = record;
+        // quienes editan el mismo formato refrescan fotos y número
+        Colaboracion.guardado(record);
       } else {
         const numero = await Store.nextNumber(format.prefix);
         record = await Store.createCotizacion({ numero, format_type: currentFormat, data });
         editingRecord = record;
         $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
+        // ya existe en el historial: desde ahora otros pueden entrar a editarlo
+        Colaboracion.unirse(record, ctxColaboracion());
       }
       guardado = record;
+      // auditoría: completó (y si firmó aquí, también firmó) el formato
+      NotificationService.registrar("formato_completado", {
+        cotizacion_id: record.id, detalle: { ...resumenDoc(record), firmado: firmasTocadas.size > 0 },
+      });
+      firmasTocadas = new Set();
 
+      const num = PDFGen.numeroImpreso(currentFormat, record) || record.numero;
       if (download) {
         etapa = "pdf";
         const rec = await Store.hydrateImages(record);
-        await PDFGen.download(currentFormat, rec, pedirNombre(currentFormat, rec));
+        const descarga = await PDFGen.download(currentFormat, rec, pedirNombre(currentFormat, rec));
+        const avisado = await NotificationService.formatoDescargado({
+          numero: num, formato: format.name, cliente: data.cliente, url: descarga.url, nombre: descarga.nombre,
+        });
+        // con el aviso de descargas apagado, al menos la confirmación de siempre
+        if (!avisado) toast(`PDF ${num} generado y guardado.`);
       }
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
-      const num = PDFGen.numeroImpreso(currentFormat, record) || record.numero;
-      toast(download ? `PDF ${num} generado y guardado.` : `Cotización ${num} guardada.`);
+      if (!download) toast(`Cotización ${num} guardada.`);
       actualizarAlmacenamiento();
       return true;
     } catch (e) {
@@ -1032,7 +1318,7 @@
   function drawHistorial() {
     const q = $("#search-historial").value.trim().toLowerCase();
     const list = $("#historial-list");
-    const isJefe = Store.getProfile().role === "jefe";
+    const isJefe = esGestor(Store.getProfile());
     const rows = historialCache.filter((c) => {
       if (!q) return true;
       const fmt = FORMATS[c.format_type];
@@ -1077,7 +1363,12 @@
         try {
           const rec = await Store.getCotizacion(id);
           const listo = await Store.hydrateImages(rec);
-          await PDFGen.download(rec.format_type, listo, pedirNombre(rec.format_type, listo));
+          const descarga = await PDFGen.download(rec.format_type, listo, pedirNombre(rec.format_type, listo));
+          NotificationService.formatoDescargado({
+            numero: PDFGen.numeroImpreso(rec.format_type, rec) || rec.numero,
+            formato: (FORMATS[rec.format_type] || {}).name, cliente: (rec.data || {}).cliente,
+            url: descarga.url, nombre: descarga.nombre,
+          });
         } catch (ex) {
           toast(ex.message || "No se pudo generar el PDF.", "error");
         } finally { e.target.disabled = false; }
@@ -1100,9 +1391,13 @@
   $("#search-historial").addEventListener("input", drawHistorial);
 
   /* ============================================================
-     USUARIOS (solo jefe)
+     USUARIOS (Jefes y Administrador)
+     El Administrador es único: lo crea un Jefe, solo él edita su
+     cuenta, no cambia de rol y no se elimina desde el portal (solo
+     desde el panel de Supabase).
      ============================================================ */
   let editingUserId = null;
+  let usuariosCache = [];
 
   async function renderUsers() {
     const list = $("#users-list");
@@ -1113,25 +1408,33 @@
       list.innerHTML = `<div class="empty-state">Error al cargar usuarios.<br><small>${escapeHtml(e.message || "")}</small></div>`;
       return;
     }
+    usuariosCache = users;
     const me = Store.getProfile();
-    list.innerHTML = users.map((u) => `
+    list.innerHTML = users.map((u) => {
+      const esAdmin = u.role === "administrador";
+      const puedeEditar = !esAdmin || u.id === me.id;
+      const puedeBorrar = u.id !== me.id && !esAdmin;
+      return `
       <div class="user-card" data-id="${u.id}">
         <div class="user-avatar">${escapeHtml((u.name || "?").charAt(0).toUpperCase())}</div>
         <div class="uc-info">
           <strong>${escapeHtml(u.name)}${u.id === me.id ? " (tú)" : ""}</strong>
           <small>${escapeHtml(u.email)}</small>
-          <span class="role-tag ${u.role}">${u.role}</span>
+          <span class="role-tag ${u.role}">${escapeHtml(rolTexto(u.role))}</span>
         </div>
         <div class="uc-actions">
-          <button class="icon-btn" data-act="edit" title="Editar">${window.ICONS.edit}</button>
-          ${u.id !== me.id ? `<button class="icon-btn danger" data-act="del" title="Eliminar">${window.ICONS.trash}</button>` : ""}
+          ${puedeEditar ? `<button class="icon-btn" data-act="edit" title="Editar" aria-label="Editar a ${escapeHtml(u.name)}">${window.ICONS.edit}</button>` : ""}
+          ${puedeBorrar ? `<button class="icon-btn danger" data-act="del" title="Eliminar" aria-label="Eliminar a ${escapeHtml(u.name)}">${window.ICONS.trash}</button>` : ""}
+          ${esAdmin && u.id !== me.id ? '<span class="uc-candado" title="Solo el Administrador modifica su cuenta; se elimina desde Supabase">Protegido</span>' : ""}
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
 
     list.querySelectorAll(".user-card").forEach((card) => {
       const id = card.dataset.id;
       const u = users.find((x) => x.id === id);
-      card.querySelector('[data-act="edit"]').addEventListener("click", () => openUserModal(u));
+      const editBtn = card.querySelector('[data-act="edit"]');
+      if (editBtn) editBtn.addEventListener("click", () => openUserModal(u, users));
       const delBtn = card.querySelector('[data-act="del"]');
       if (delBtn) delBtn.addEventListener("click", async () => {
         const ok = await showConfirm("Eliminar usuario",
@@ -1150,15 +1453,33 @@
   let firmaUsuarioCambio = false;
   const padUsuario = crearPadFirma($("#uf-firma"), () => { firmaUsuarioCambio = true; });
 
-  async function openUserModal(user) {
+  /* opciones de rol: «Administrador» se desactiva si ya hay uno, y el
+     propio Administrador no puede cambiar su rol */
+  function prepararRoles(user, users) {
+    const sel = $("#uf-role");
+    const hayAdmin = users.some((u) => u.role === "administrador");
+    const esElAdmin = !!user && user.role === "administrador";
+    const opcion = sel.querySelector('option[value="administrador"]');
+    opcion.disabled = hayAdmin && !esElAdmin;
+    opcion.textContent = opcion.disabled ? "Administrador (ya hay uno)" : "Administrador";
+    sel.disabled = esElAdmin;
+    const ayuda = $("#uf-role-hint");
+    ayuda.textContent = esElAdmin
+      ? "El rol de Administrador no se cambia desde el portal."
+      : hayAdmin ? "Ya hay un Administrador en el portal: solo puede haber uno."
+        : "El Administrador es único y solo se puede eliminar desde Supabase.";
+  }
+
+  async function openUserModal(user, users = usuariosCache) {
     editingUserId = user ? user.id : null;
-    $("#user-modal-title").textContent = user ? "Editar usuario" : "Nuevo trabajador";
+    $("#user-modal-title").textContent = user ? "Editar usuario" : "Nuevo usuario";
     $("#uf-name").value = user ? user.name : "";
     $("#uf-email").value = user ? user.email : "";
     $("#uf-password").value = "";
     $("#uf-password").required = !user;
     $("#uf-password").placeholder = user ? "Dejar vacío para no cambiarla" : "Mínimo 6 caracteres";
     $("#uf-role").value = user ? user.role : "trabajador";
+    prepararRoles(user, users || []);
     const err = $("#user-form-error");
     err.classList.add("hidden");
     padUsuario.limpiar();
@@ -1192,7 +1513,7 @@
     }
   });
 
-  $("#new-user-btn").addEventListener("click", () => openUserModal(null));
+  $("#new-user-btn").addEventListener("click", () => openUserModal(null, usuariosCache));
   $("#user-modal [data-close-modal]").addEventListener("click", () => $("#user-modal").classList.add("hidden"));
 
   $("#user-form").addEventListener("submit", async (e) => {
@@ -1218,11 +1539,17 @@
           await Store.saveUserFirma(editingUserId, padUsuario.exportar());
           firmaUsuarioCambio = false;
         } catch (ex) {
-          throw new Error(`${eraNuevo ? "Trabajador creado" : "Datos guardados"}, pero la firma no: ${ex.message}`);
+          throw new Error(`${eraNuevo ? "Usuario creado" : "Datos guardados"}, pero la firma no: ${ex.message}`);
         }
       }
       $("#user-modal").classList.add("hidden");
-      toast(eraNuevo ? "Trabajador creado." : "Usuario actualizado.");
+      toast(eraNuevo ? "Usuario creado." : "Usuario actualizado.");
+      // si editó su propia cuenta, el menú muestra el nombre nuevo
+      const me = Store.getProfile();
+      if (me && editingUserId === me.id) {
+        $("#user-name").textContent = payload.name;
+        $("#user-avatar").textContent = (payload.name || "?").trim().charAt(0).toUpperCase();
+      }
       renderUsers();
       actualizarAlmacenamiento();
     } catch (ex) {

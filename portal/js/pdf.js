@@ -598,7 +598,10 @@ const PDFGen = {
       .replace(/\.pdf$/i, "");
     a.download = (elegido || propuesto) + ".pdf";
     a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    /* el enlace sigue vivo 10 min: el aviso «PDF listo» lo usa para
+       abrir el archivo con un toque */
+    setTimeout(() => URL.revokeObjectURL(a.href), 10 * 60000);
+    return { url: a.href, nombre: a.download };
   },
   /* Blob URL en lugar de data-URI: los data-URI grandes (plantilla A.A ~8MB)
      superan el límite del iframe en Chrome y la vista previa sale en blanco. */

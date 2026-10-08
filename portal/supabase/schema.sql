@@ -14,6 +14,11 @@
 --   5) Migración de datos ya guardados
 --   6) Firma digital de cada usuario
 --   7) Almacenamiento usado (barra del menú)
+--   8) Rol Administrador (único por portal)
+--   9) Eventos de auditoría (avisos al Administrador y Jefes)
+--  10) Dispositivos de cada cuenta (alertas de inicio de sesión)
+--  11) Suscripciones a notificaciones push
+--  12) Permisos del tiempo real (presencia, edición en conjunto, llamadas)
 -- ============================================================
 
 
@@ -24,20 +29,21 @@ create table if not exists public.profiles (
   id         uuid primary key references auth.users (id) on delete cascade,
   full_name  text not null,
   email      text not null,
-  role       text not null default 'trabajador' check (role in ('trabajador', 'jefe')),
+  role       text not null default 'trabajador' check (role in ('trabajador', 'jefe', 'administrador')),
   created_at timestamptz not null default now()
 );
 
 alter table public.profiles enable row level security;
 
--- ¿El usuario conectado es jefe?
+-- ¿El usuario conectado gestiona el portal? (Jefe o Administrador:
+-- el Administrador tiene todos los permisos de un Jefe)
 create or replace function public.is_jefe()
 returns boolean
 language sql stable security definer set search_path = public
 as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role = 'jefe'
+    where id = auth.uid() and role in ('jefe', 'administrador')
   );
 $$;
 
@@ -317,6 +323,11 @@ begin
   if p_usuario <> auth.uid() and not public.is_jefe() then
     raise exception 'Solo los Jefes pueden cambiar la firma de otro usuario.';
   end if;
+  -- la firma del Administrador solo la cambia él mismo
+  if p_usuario <> auth.uid()
+     and exists (select 1 from public.profiles where id = p_usuario and role = 'administrador') then
+    raise exception 'Solo el Administrador puede cambiar su propia firma.';
+  end if;
   update public.profiles set firma = nullif(p_firma, '') where id = p_usuario;
   if not found then
     raise exception 'Usuario no encontrado.';
@@ -351,6 +362,282 @@ $$;
 
 revoke all on function public.uso_almacenamiento() from public, anon;
 grant execute on function public.uso_almacenamiento() to authenticated;
+
+
+-- ============================================================
+-- 8) ROL ADMINISTRADOR
+--    - Solo puede haber UNO por portal (índice único).
+--    - Lo crea un Jefe desde el portal (Usuarios → Nuevo usuario).
+--    - Tiene todos los permisos de un Jefe (ver is_jefe) y además
+--      recibe los avisos de auditoría.
+--    - Desde el portal nadie lo degrada ni lo elimina: solo desde el
+--      panel de Supabase (SQL Editor o Authentication → Users).
+-- ============================================================
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check
+  check (role in ('trabajador', 'jefe', 'administrador'));
+
+create unique index if not exists profiles_un_administrador
+  on public.profiles (role) where role = 'administrador';
+
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'administrador');
+$$;
+
+/* Las órdenes que llegan por la API (PostgREST) traen un JWT en
+   request.jwt.claims; el SQL Editor y el panel de Authentication no.
+   Así el Administrador no se puede degradar ni borrar desde el portal
+   (ni con la service role de la Edge Function), pero sí desde Supabase. */
+create or replace function public.proteger_administrador()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+declare
+  por_api boolean := coalesce(current_setting('request.jwt.claims', true), '') <> '';
+begin
+  if OLD.role = 'administrador'
+     and (TG_OP = 'DELETE' or NEW.role <> 'administrador')
+     and por_api then
+    raise exception 'El Administrador solo se puede quitar desde el panel de Supabase.';
+  end if;
+  if TG_OP = 'DELETE' then return OLD; end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists proteger_administrador on public.profiles;
+create trigger proteger_administrador
+  before update or delete on public.profiles
+  for each row execute function public.proteger_administrador();
+
+
+-- ============================================================
+-- 9) EVENTOS DE AUDITORÍA
+--    Lo que ven en vivo el Administrador y los Jefes: un trabajador
+--    entra, abre o empieza a editar un formato, lo completa o firma.
+--    También las alertas de inicio de sesión en un dispositivo nuevo
+--    (esas solo las ve el dueño de la cuenta).
+-- ============================================================
+create table if not exists public.eventos (
+  id            bigint generated always as identity primary key,
+  tipo          text not null,
+  actor_id      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  actor_nombre  text,
+  actor_rol     text,
+  cotizacion_id uuid references public.cotizaciones (id) on delete set null,
+  detalle       jsonb not null default '{}'::jsonb,
+  created_at    timestamptz not null default now()
+);
+
+alter table public.eventos drop constraint if exists eventos_tipo_check;
+alter table public.eventos add constraint eventos_tipo_check check (tipo in (
+  'ingreso', 'formato_abierto', 'formato_editando', 'formato_completado', 'nuevo_dispositivo', 'llamada'));
+alter table public.eventos drop constraint if exists eventos_detalle_check;
+alter table public.eventos add constraint eventos_detalle_check check (octet_length(detalle::text) <= 4000);
+
+create index if not exists eventos_fecha_idx on public.eventos (created_at desc);
+
+alter table public.eventos enable row level security;
+
+drop policy if exists "ev_insert" on public.eventos;
+create policy "ev_insert" on public.eventos
+  for insert to authenticated with check (actor_id = auth.uid());
+
+drop policy if exists "ev_select" on public.eventos;
+create policy "ev_select" on public.eventos
+  for select to authenticated using (
+    (tipo = 'nuevo_dispositivo' and actor_id = auth.uid())
+    or (tipo <> 'nuevo_dispositivo' and public.is_jefe())
+  );
+
+-- quién lo hizo lo pone la base de datos (no se puede falsear desde el navegador)
+create or replace function public.completar_evento()
+returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  NEW.actor_id := auth.uid();
+  NEW.created_at := now();
+  select full_name, role into NEW.actor_nombre, NEW.actor_rol
+    from public.profiles where id = NEW.actor_id;
+  if NEW.actor_nombre is null then
+    raise exception 'Perfil no encontrado.';
+  end if;
+  if NEW.tipo = 'llamada' and NEW.actor_rol not in ('jefe', 'administrador') then
+    raise exception 'Solo los Jefes y el Administrador hacen llamadas.';
+  end if;
+  -- la tabla no crece sin fin: de vez en cuando se borra lo de más de 90 días
+  if random() < 0.02 then
+    delete from public.eventos where created_at < now() - interval '90 days';
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists completar_evento on public.eventos;
+create trigger completar_evento
+  before insert on public.eventos
+  for each row execute function public.completar_evento();
+
+-- los eventos nuevos viajan en tiempo real (la RLS de arriba decide a quién)
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'eventos') then
+    alter publication supabase_realtime add table public.eventos;
+  end if;
+end;
+$$;
+
+
+-- ============================================================
+-- 10) DISPOSITIVOS DE CADA CUENTA
+--     Si alguien entra desde un navegador que la cuenta no había usado
+--     y ya tiene otros, el portal avisa en los otros equipos (estilo
+--     Gmail). Cada quien solo ve los suyos.
+-- ============================================================
+create table if not exists public.dispositivos (
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  dispositivo text not null check (length(dispositivo) between 8 and 64),
+  navegador   text,
+  sistema     text,
+  tipo        text,
+  creado      timestamptz not null default now(),
+  visto       timestamptz not null default now(),
+  primary key (user_id, dispositivo)
+);
+
+alter table public.dispositivos enable row level security;
+
+drop policy if exists "disp_select" on public.dispositivos;
+create policy "disp_select" on public.dispositivos
+  for select to authenticated using (user_id = auth.uid());
+
+create or replace function public.registrar_dispositivo(
+  p_dispositivo text, p_navegador text, p_sistema text, p_tipo text)
+returns json
+language plpgsql security definer set search_path = public
+as $$
+declare
+  otros integer;
+  nuevo boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+  select count(*) into otros from public.dispositivos
+   where user_id = auth.uid() and dispositivo <> p_dispositivo;
+  insert into public.dispositivos (user_id, dispositivo, navegador, sistema, tipo)
+  values (auth.uid(), left(p_dispositivo, 64), left(p_navegador, 40), left(p_sistema, 40), left(p_tipo, 20))
+  on conflict (user_id, dispositivo) do update
+    set visto = now(), navegador = excluded.navegador, sistema = excluded.sistema, tipo = excluded.tipo
+  returning (xmax = 0) into nuevo;   -- true = era nuevo (se insertó)
+  return json_build_object('nuevo', nuevo, 'otros', otros);
+end;
+$$;
+
+revoke all on function public.registrar_dispositivo(text, text, text, text) from public, anon;
+grant execute on function public.registrar_dispositivo(text, text, text, text) to authenticated;
+
+
+-- ============================================================
+-- 11) SUSCRIPCIONES A NOTIFICACIONES PUSH
+--     Una por navegador, con las preferencias de avisos de esa
+--     persona (la Edge Function «notificar» las respeta).
+-- ============================================================
+create table if not exists public.push_suscripciones (
+  endpoint    text primary key check (endpoint like 'https://%' and length(endpoint) <= 1000),
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  p256dh      text not null,
+  auth        text not null,
+  dispositivo text,
+  prefs       jsonb not null default '{}'::jsonb,
+  actualizada timestamptz not null default now()
+);
+
+create index if not exists push_usuario_idx on public.push_suscripciones (user_id);
+
+alter table public.push_suscripciones enable row level security;
+
+drop policy if exists "push_select" on public.push_suscripciones;
+create policy "push_select" on public.push_suscripciones
+  for select to authenticated using (user_id = auth.uid());
+
+drop policy if exists "push_delete" on public.push_suscripciones;
+create policy "push_delete" on public.push_suscripciones
+  for delete to authenticated using (user_id = auth.uid());
+
+-- si el navegador ya estaba suscrito con otra cuenta, pasa a la actual
+create or replace function public.guardar_suscripcion(
+  p_endpoint text, p_p256dh text, p_auth text, p_dispositivo text, p_prefs jsonb)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+  insert into public.push_suscripciones (endpoint, user_id, p256dh, auth, dispositivo, prefs)
+  values (p_endpoint, auth.uid(), p_p256dh, p_auth, left(p_dispositivo, 64), coalesce(p_prefs, '{}'::jsonb))
+  on conflict (endpoint) do update
+    set user_id = auth.uid(), p256dh = excluded.p256dh, auth = excluded.auth,
+        dispositivo = excluded.dispositivo, prefs = excluded.prefs, actualizada = now();
+end;
+$$;
+
+revoke all on function public.guardar_suscripcion(text, text, text, text, jsonb) from public, anon;
+grant execute on function public.guardar_suscripcion(text, text, text, text, jsonb) to authenticated;
+
+
+-- ============================================================
+-- 12) PERMISOS DEL TIEMPO REAL (canales privados)
+--     portal        presencia: todos los usuarios del portal
+--     auditoria     cambios de la tabla eventos (filtra su propia RLS)
+--     usuario:<id>  buzón de llamadas: lo lee solo su dueño; cualquiera
+--                   del portal puede escribirle (para timbrar/contestar)
+--     doc:<id>      un formato: quien puede verlo (dueño o Jefe/Admin)
+-- ============================================================
+create or replace function public.rt_permitido(p_topic text, p_escribir boolean)
+returns boolean
+language plpgsql stable security definer set search_path = public
+as $$
+declare
+  pre   text := split_part(p_topic, ':', 1);
+  resto text := substr(p_topic, length(split_part(p_topic, ':', 1)) + 2);
+begin
+  if auth.uid() is null or not exists (select 1 from public.profiles where id = auth.uid()) then
+    return false;
+  end if;
+  if p_topic in ('portal', 'auditoria') then
+    return true;
+  end if;
+  if pre = 'usuario' then
+    return p_escribir or resto = auth.uid()::text;
+  end if;
+  if pre = 'doc' and resto ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    return exists (
+      select 1 from public.cotizaciones c
+       where c.id = resto::uuid and (c.user_id = auth.uid() or public.is_jefe())
+    );
+  end if;
+  return false;
+end;
+$$;
+
+revoke all on function public.rt_permitido(text, boolean) from public, anon;
+grant execute on function public.rt_permitido(text, boolean) to authenticated;
+
+drop policy if exists "rt_leer" on realtime.messages;
+create policy "rt_leer" on realtime.messages
+  for select to authenticated using (public.rt_permitido(realtime.topic(), false));
+
+drop policy if exists "rt_escribir" on realtime.messages;
+create policy "rt_escribir" on realtime.messages
+  for insert to authenticated with check (public.rt_permitido(realtime.topic(), true));
 
 
 -- ============================================================

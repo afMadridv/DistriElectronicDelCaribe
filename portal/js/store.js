@@ -3,7 +3,14 @@
    La app solo habla con `Store`, nunca con Supabase directo.
    ============================================================ */
 (function () {
-  const DEMO_KEYS = { users: "dec_users", cots: "dec_cotizaciones", session: "dec_session", seq: "dec_seq" };
+  const DEMO_KEYS = {
+    users: "dec_users", cots: "dec_cotizaciones", session: "dec_session", seq: "dec_seq",
+    eventos: "dec_eventos", dispositivos: "dec_dispositivos",
+  };
+  const PERFIL_CACHE = "dec_perfil";   // para poder abrir el portal sin conexión
+  /* roles que gestionan el portal (ven usuarios, auditoría y llaman) */
+  const GESTORES = ["jefe", "administrador"];
+  const esGestor = (p) => !!p && GESTORES.includes(p.role);
   const SIGNED_TTL = 3600;        // segundos que vive una URL firmada
   const signedUrls = new Map();   // ruta → { url, expira }
   let sb = null;          // cliente supabase
@@ -41,6 +48,10 @@
   function makeClient(keep) {
     return window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY, {
       auth: { storage: keep ? window.localStorage : window.sessionStorage },
+      /* latidos del tiempo real en un Worker: el navegador frena los
+         temporizadores de las pestañas en segundo plano y sin esto la
+         conexión se caía (presencia y llamadas entrantes) */
+      realtime: { worker: true },
     });
   }
 
@@ -93,14 +104,27 @@
     if (!lsGet(DEMO_KEYS.cots, null)) lsSet(DEMO_KEYS.cots, []);
   }
 
+  /* sesión del modo demo: con «mantener sesión» va en localStorage y sin
+     ella en sessionStorage (como en producción). Así también se pueden
+     abrir dos pestañas con personas distintas para probar el tiempo real. */
+  function demoSesion() {
+    try { return JSON.parse(sessionStorage.getItem(DEMO_KEYS.session)) || lsGet(DEMO_KEYS.session, null); }
+    catch { return lsGet(DEMO_KEYS.session, null); }
+  }
+
+  /* fetch solo dice «Failed to fetch» cuando la petición ni siquiera salió */
+  const esErrorDeRed = (e) => /failed to fetch|load failed|networkerror|network request failed/i
+    .test(String((e && e.message) || e || ""));
+
   /* ============================================================ */
   const Store = {
     isDemo: window.IS_DEMO,
+    esGestor,
 
     async init() {
       if (this.isDemo) {
         seedDemo();
-        const sess = lsGet(DEMO_KEYS.session, null);
+        const sess = demoSesion();
         if (sess) {
           const user = lsGet(DEMO_KEYS.users, []).find((u) => u.id === sess.id);
           if (user) currentProfile = perfil(user);
@@ -109,16 +133,31 @@
       }
       sb = makeClient(localStorage.getItem("dec_keep") !== "0");
       const { data: { session } } = await sb.auth.getSession();
-      if (session) currentProfile = await this._loadProfile(session.user.id);
+      if (!session) return null;
+      try {
+        currentProfile = await this._loadProfile(session.user.id);
+      } catch (e) {
+        /* sin internet: se entra con el último perfil conocido de esta misma
+           cuenta, para poder llenar formatos y ver la vista previa. Guardar
+           sí necesita conexión y lo avisa al intentarlo. */
+        const guardado = lsGet(PERFIL_CACHE, null);
+        if (!esErrorDeRed(e) || !guardado || guardado.id !== session.user.id) throw e;
+        currentProfile = { ...guardado, sinConexion: true };
+      }
       return currentProfile;
     },
 
     getProfile() { return currentProfile; },
 
+    /* cliente de Supabase para el tiempo real (null en modo demo) */
+    cliente() { return sb; },
+
     async _loadProfile(userId) {
       const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
       if (error) throw error;
-      return perfil(data);
+      const p = perfil(data);
+      try { lsSet(PERFIL_CACHE, p); } catch { /* sin espacio: no pasa nada */ }
+      return p;
     },
 
     /* ---------- autenticación ---------- */
@@ -132,7 +171,8 @@
         );
         if (!user) throw new Error("Usuario o contraseña incorrectos.");
         currentProfile = perfil(user);
-        lsSet(DEMO_KEYS.session, { id: user.id });
+        if (keep) lsSet(DEMO_KEYS.session, { id: user.id });
+        else sessionStorage.setItem(DEMO_KEYS.session, JSON.stringify({ id: user.id }));
         return currentProfile;
       }
       localStorage.setItem("dec_keep", keep ? "1" : "0");
@@ -144,8 +184,13 @@
     },
 
     async logout() {
-      if (this.isDemo) localStorage.removeItem(DEMO_KEYS.session);
-      else await sb.auth.signOut();
+      if (this.isDemo) {
+        localStorage.removeItem(DEMO_KEYS.session);
+        sessionStorage.removeItem(DEMO_KEYS.session);
+      } else {
+        await sb.auth.signOut();
+        localStorage.removeItem(PERFIL_CACHE);
+      }
       currentProfile = null;
     },
 
@@ -171,7 +216,7 @@
     async listCotizaciones() {
       if (this.isDemo) {
         const all = lsGet(DEMO_KEYS.cots, []);
-        const mine = currentProfile.role === "jefe" ? all : all.filter((c) => c.user_id === currentProfile.id);
+        const mine = esGestor(currentProfile) ? all : all.filter((c) => c.user_id === currentProfile.id);
         return mine
           .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
           .map((c) => ({ ...c, cliente: c.data?.cliente || "", no_doc: c.data?.no_ott || "" }));
@@ -331,11 +376,17 @@
       return data.map((u) => ({ id: u.id, name: u.full_name, email: u.email, role: u.role }));
     },
 
+    /* Reglas del Administrador (las mismas que aplica la Edge Function
+       admin-users y la base de datos): solo puede haber uno, lo crea un
+       Jefe, nadie lo modifica salvo él mismo, no cambia de rol y solo se
+       elimina desde el panel de Supabase. */
     async createUser({ name, email, password, role }) {
       if (this.isDemo) {
         const users = lsGet(DEMO_KEYS.users, []);
         if (users.some((u) => u.email.toLowerCase() === email.toLowerCase()))
           throw new Error("Ya existe un usuario con ese correo.");
+        if (role === "administrador" && users.some((u) => u.role === "administrador"))
+          throw new Error("Ya hay un Administrador en el portal: solo puede haber uno.");
         const id = uid();
         users.push({ id, name, email, password, role });
         lsSet(DEMO_KEYS.users, users);
@@ -350,9 +401,16 @@
         const users = lsGet(DEMO_KEYS.users, []);
         const u = users.find((x) => x.id === id);
         if (!u) throw new Error("Usuario no encontrado.");
+        if (u.role === "administrador" && currentProfile.id !== id)
+          throw new Error("Solo el Administrador puede modificar su propia cuenta.");
+        if (u.role === "administrador" && role !== "administrador")
+          throw new Error("El rol de Administrador no se puede cambiar desde el portal.");
+        if (role === "administrador" && u.role !== "administrador" && users.some((x) => x.role === "administrador"))
+          throw new Error("Ya hay un Administrador en el portal: solo puede haber uno.");
         u.name = name; u.email = email; u.role = role;
         if (password) u.password = password;
         lsSet(DEMO_KEYS.users, users);
+        if (currentProfile.id === id) Object.assign(currentProfile, { name, email, role });
         return;
       }
       await this._adminUsers({ action: "update", id, name, email, password: password || undefined, role });
@@ -360,7 +418,10 @@
 
     async deleteUser(id) {
       if (this.isDemo) {
-        lsSet(DEMO_KEYS.users, lsGet(DEMO_KEYS.users, []).filter((u) => u.id !== id));
+        const users = lsGet(DEMO_KEYS.users, []);
+        if ((users.find((u) => u.id === id) || {}).role === "administrador")
+          throw new Error("El Administrador solo se puede eliminar desde Supabase.");
+        lsSet(DEMO_KEYS.users, users.filter((u) => u.id !== id));
         return;
       }
       await this._adminUsers({ action: "delete", id });
@@ -381,6 +442,8 @@
         const users = lsGet(DEMO_KEYS.users, []);
         const u = users.find((x) => x.id === id);
         if (!u) throw new Error("Usuario no encontrado.");
+        if (u.role === "administrador" && currentProfile.id !== id)
+          throw new Error("Solo el Administrador puede cambiar su propia firma.");
         u.firma = firma || null;
         lsSet(DEMO_KEYS.users, users);
       } else {
@@ -415,6 +478,84 @@
       const { data, error } = await sb.rpc("uso_almacenamiento");
       if (error) throw errorDeEsquema(error, "ver el almacenamiento");
       return data;
+    },
+
+    /* ---------- eventos de auditoría ----------
+       Lo que ve el Administrador (y los Jefes): ingresos, formatos abiertos,
+       completados o firmados, y alertas de inicio de sesión. El nombre y el
+       rol de quien lo hizo los pone la base de datos, no el navegador. */
+    async registrarEvento(tipo, { cotizacion_id = null, detalle = {} } = {}) {
+      if (this.isDemo) {
+        const ev = {
+          id: uid(), tipo, cotizacion_id, detalle,
+          actor_id: currentProfile.id, actor_nombre: currentProfile.name, actor_rol: currentProfile.role,
+          created_at: new Date().toISOString(),
+        };
+        const todos = lsGet(DEMO_KEYS.eventos, []);
+        todos.push(ev);
+        lsSet(DEMO_KEYS.eventos, todos.slice(-200));
+        if (window.Tiempo) Tiempo.publicarEventoDemo(ev);
+        return ev;
+      }
+      const { data, error } = await sb.from("eventos")
+        .insert({ tipo, cotizacion_id, detalle }).select("id").single();
+      if (error) throw errorDeEsquema(error, "registrar el evento");
+      /* aviso push a quien tenga el portal cerrado (Edge Function
+         «notificar»); si no está desplegada, simplemente no llega */
+      sb.functions.invoke("notificar", { body: { evento_id: data.id } })
+        .then(({ error: e }) => e && console.debug("push:", e.message))
+        .catch(() => {});
+      return data;
+    },
+
+    /* últimos eventos visibles para este usuario (la RLS decide cuáles) */
+    async listarEventos(limite = 20) {
+      if (this.isDemo) {
+        return lsGet(DEMO_KEYS.eventos, [])
+          .filter((e) => (esGestor(currentProfile) && e.tipo !== "nuevo_dispositivo")
+            || (e.tipo === "nuevo_dispositivo" && e.actor_id === currentProfile.id))
+          .slice(-limite).reverse();
+      }
+      const { data, error } = await sb.from("eventos").select("*")
+        .order("created_at", { ascending: false }).limit(limite);
+      if (error) throw errorDeEsquema(error, "leer los eventos");
+      return data;
+    },
+
+    /* ---------- dispositivos de cada cuenta ----------
+       Devuelve { nuevo, otros }: si este navegador no se había usado con
+       la cuenta y ya hay otros, es un inicio de sesión en equipo nuevo. */
+    async registrarDispositivo(info) {
+      if (this.isDemo) {
+        const mapa = lsGet(DEMO_KEYS.dispositivos, {});
+        const mios = mapa[currentProfile.id] || [];
+        const nuevo = !mios.includes(info.id);
+        const otros = mios.filter((d) => d !== info.id).length;
+        if (nuevo) { mios.push(info.id); mapa[currentProfile.id] = mios; lsSet(DEMO_KEYS.dispositivos, mapa); }
+        return { nuevo, otros };
+      }
+      const { data, error } = await sb.rpc("registrar_dispositivo", {
+        p_dispositivo: info.id, p_navegador: info.navegador, p_sistema: info.sistema, p_tipo: info.tipo,
+      });
+      if (error) throw errorDeEsquema(error, "registrar el dispositivo");
+      return data;
+    },
+
+    /* ---------- suscripción a notificaciones push ----------
+       Cada navegador guarda su suscripción y qué avisos quiere recibir. */
+    async guardarSuscripcion(sub, prefs, dispositivo) {
+      if (this.isDemo) return;
+      const j = sub.toJSON();
+      const { error } = await sb.rpc("guardar_suscripcion", {
+        p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
+        p_dispositivo: dispositivo, p_prefs: prefs,
+      });
+      if (error) throw errorDeEsquema(error, "activar las notificaciones push");
+    },
+
+    async borrarSuscripcion(endpoint) {
+      if (this.isDemo || !endpoint) return;
+      await sb.from("push_suscripciones").delete().eq("endpoint", endpoint);
     },
 
     /* Llama a la Edge Function admin-users (usa service role en el servidor) */

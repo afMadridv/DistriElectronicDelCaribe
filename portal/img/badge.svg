@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Insignia monocroma de la barra de estado de Android (solo la silueta) -->
+  <g transform="translate(256 256) scale(0.9) translate(-274 -256)">
+    <path fill="#fff" fill-rule="evenodd" d="M132 104h124c95 0 160 63 160 152s-65 152-160 152H132zM198 166v180h54c56 0 92-36 92-90s-36-90-92-90z"/>
+    <path fill="#fff" d="M284 196L222 272H258L244 318L306 240H268Z"/>
+  </g>
+</svg>
