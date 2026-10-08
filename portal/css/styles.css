@@ -33,6 +33,14 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 img, svg, canvas, video, iframe { max-width: 100%; }
+/* iOS y Android no dejan alejar ni correr la página de lado si nada es
+   más ancho que la pantalla; html también, porque Safari ignora el body */
+html { overflow-x: hidden; }
+/* Safari pinta el texto de los botones con el azul del sistema */
+button { color: inherit; }
+/* Safari da a la fecha un ancho propio y se sale de su casilla */
+input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .hidden { display: none !important; }
 
 /* aviso cuando el portal se abre con doble clic (file://) */
@@ -458,8 +466,9 @@ img, svg, canvas, video, iframe { max-width: 100%; }
 .empty-state .es-icon { font-size: 36px; margin-bottom: 10px; }
 
 /* ---------- Usuarios ---------- */
-.users-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.users-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 14px; }
 .user-card {
+  min-width: 0;   /* un correo largo se corta con «…» en vez de ensanchar la página */
   background: var(--white); border-radius: var(--radius);
   padding: 18px 20px; box-shadow: var(--shadow);
   display: flex; align-items: center; gap: 14px;
@@ -606,7 +615,8 @@ img, svg, canvas, video, iframe { max-width: 100%; }
   .items-table td { padding: 3px 4px 3px 0; }
   .items-table input, .items-table select { font-size: 16px; padding: 9px 7px; }
   .items-table .col-banco { width: 58px; }
-  .items-table .col-cant { width: 50px; }
+  .items-table .col-cant { width: 66px; }   /* cabe «CANTIDAD» sin montarse en la columna de al lado */
+  .items-table th { letter-spacing: .2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .items-table .col-precio { width: 82px; }
   .items-table .col-del { width: 30px; }
   .items-table .col-med { width: auto; }
