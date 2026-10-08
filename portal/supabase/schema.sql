@@ -450,7 +450,9 @@ drop policy if exists "ev_select" on public.eventos;
 create policy "ev_select" on public.eventos
   for select to authenticated using (
     (tipo = 'nuevo_dispositivo' and actor_id = auth.uid())
-    or (tipo <> 'nuevo_dispositivo' and public.is_jefe())
+    -- el Administrador ve lo de trabajadores y Jefes; los Jefes, solo lo de trabajadores
+    or (tipo <> 'nuevo_dispositivo' and (public.is_admin()
+        or (public.is_jefe() and (actor_rol = 'trabajador' or actor_id = auth.uid()))))
   );
 
 -- quién lo hizo lo pone la base de datos (no se puede falsear desde el navegador)

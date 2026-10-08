@@ -127,8 +127,12 @@ Deno.serve(async (req) => {
       const para = String((ev.detalle as Record<string, unknown>).para ?? "");
       if (para) destinatarios = [para];
     } else {
-      if (ev.actor_rol !== "trabajador") return json({ ok: true, enviadas: 0 });
-      const { data } = await admin.from("profiles").select("id").in("role", ["jefe", "administrador"]);
+      /* lo que hace un trabajador les llega a los Jefes y al Administrador;
+         lo que hace un Jefe, solo al Administrador */
+      const roles = ev.actor_rol === "trabajador" ? ["jefe", "administrador"]
+        : ev.actor_rol === "jefe" ? ["administrador"] : [];
+      if (!roles.length) return json({ ok: true, enviadas: 0 });
+      const { data } = await admin.from("profiles").select("id").in("role", roles);
       destinatarios = (data ?? []).map((p) => p.id).filter((id) => id !== ev.actor_id);
     }
     if (!destinatarios.length) return json({ ok: true, enviadas: 0 });

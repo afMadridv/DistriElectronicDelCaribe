@@ -10,8 +10,9 @@
 
    Qué recibe cada rol:
      Trabajador     solo «formato descargado».
-     Jefe / Admin   además: inicio de sesión en un dispositivo nuevo y
+     Jefe           además: inicio de sesión en un dispositivo nuevo y
                     la actividad de los trabajadores (auditoría).
+     Administrador  lo mismo, más la actividad de los Jefes.
    ============================================================ */
 (function () {
   const GESTORES = ["jefe", "administrador"];
@@ -30,16 +31,19 @@
     },
     ingresos: {
       titulo: "Un trabajador entra al portal",
+      tituloAdmin: "Un trabajador o un Jefe entra al portal",
       desc: "Con el dispositivo y el navegador que usa.",
       roles: GESTORES,
     },
     formatos_abiertos: {
       titulo: "Un trabajador abre o empieza a editar un formato",
+      tituloAdmin: "Un trabajador o un Jefe abre o edita un formato",
       desc: "Para saber en qué está trabajando cada quien.",
       roles: GESTORES,
     },
     formatos_completados: {
       titulo: "Un trabajador completa o firma un formato",
+      tituloAdmin: "Un trabajador o un Jefe completa o firma un formato",
       desc: "Cuando lo guarda en el historial.",
       roles: GESTORES,
     },
@@ -83,6 +87,9 @@
   const esStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   const soportaSistema = () => "Notification" in window;
   const permiso = () => (soportaSistema() ? Notification.permission : "no-soportado");
+
+  /* el Administrador también recibe lo de los Jefes */
+  const tituloCat = (k) => (perfil && perfil.role === "administrador" && CATEGORIAS[k].tituloAdmin) || CATEGORIAS[k].titulo;
 
   function categoriasDelRol() {
     return Object.entries(CATEGORIAS).filter(([, c]) => perfil && c.roles.includes(perfil.role)).map(([k]) => k);
@@ -232,7 +239,7 @@
      Edge Function «notificar» para el push)
      ---------------------------------------------------------- */
   function textoEvento(ev) {
-    const quien = ev.actor_nombre || "Un trabajador";
+    const quien = ev.actor_nombre || (ev.actor_rol === "jefe" ? "Un Jefe" : "Un trabajador");
     const d = ev.detalle || {};
     const doc = [d.formato, d.no_doc ? `No. OTT ${d.no_doc}` : d.numero, d.cliente].filter(Boolean).join(" · ");
     const hora = new Date(ev.created_at || Date.now())
@@ -265,7 +272,10 @@
     if (ev.tipo === "nuevo_dispositivo") {
       return ev.actor_id === perfil.id && (ev.detalle || {}).id !== Dispositivo.id();
     }
-    return ev.actor_id !== perfil.id;
+    if (ev.actor_id === perfil.id) return false;
+    // lo que hacen los Jefes solo se le avisa al Administrador
+    if (ev.actor_rol === "jefe") return perfil.role === "administrador";
+    return true;
   }
 
   function recibirEvento(ev) {
@@ -336,7 +346,7 @@
   }
 
   function pedirPermiso(alTerminar) {
-    const lista = categoriasDelRol().map((k) => `<li>${ICONOS[k]}<span>${esc(CATEGORIAS[k].titulo)}</span></li>`).join("");
+    const lista = categoriasDelRol().map((k) => `<li>${ICONOS[k]}<span>${esc(tituloCat(k))}</span></li>`).join("");
     const { capa, cerrar } = modal(`
       <div class="noti-permiso-icono">${ICONOS.campana}</div>
       <h3>¿Activar las notificaciones?</h3>
@@ -425,7 +435,7 @@
             <label class="interruptor">
               <input type="checkbox" role="switch" data-pref="${k}" ${prefs[k] !== false ? "checked" : ""} />
               <span class="interruptor-pista" aria-hidden="true"></span>
-              <span class="interruptor-texto"><strong>${esc(CATEGORIAS[k].titulo)}</strong><small>${esc(CATEGORIAS[k].desc)}</small></span>
+              <span class="interruptor-texto"><strong>${esc(tituloCat(k))}</strong><small>${esc(CATEGORIAS[k].desc)}</small></span>
             </label>`).join("")}</div>
         </div>
         <footer class="noti-pie">
@@ -561,9 +571,11 @@
       });
     },
 
-    /* registra un evento de auditoría (solo se audita a los trabajadores) */
+    /* registra un evento de auditoría: lo de los trabajadores lo ven los
+       Jefes y el Administrador; lo de los Jefes, solo el Administrador.
+       Al Administrador no se le audita. */
     async registrar(tipo, opciones) {
-      if (!perfil || perfil.role !== "trabajador") return;
+      if (!perfil || !["trabajador", "jefe"].includes(perfil.role)) return;
       try { await Store.registrarEvento(tipo, opciones); }
       catch (e) { console.debug("auditoría:", e.message); }
     },

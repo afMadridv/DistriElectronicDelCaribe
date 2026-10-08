@@ -73,12 +73,49 @@
     if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     try { navigator.vibrate(patron); } catch { /* sin vibración */ }
   }
+  /* iOS: con el interruptor de silencio el sonido de la página se apaga;
+     en modo «reproducción» suena igual que una llamada (Safari 16.4+) */
+  function sesionAudio(tipo) {
+    try { if (navigator.audioSession) navigator.audioSession.type = tipo; } catch { /* sin soporte */ }
+  }
+
+  /* Los navegadores solo dejan sonar una página después de que la persona
+     la toca. Con el primer toque (en cualquier parte del portal) se deja
+     el audio habilitado, así el timbre suena cuando llegue una llamada. */
+  function crearAudioCtx() {
+    try { audioCtx ||= new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" }); }
+    catch { audioCtx = null; }
+    return audioCtx;
+  }
+  function habilitarAudio() {
+    const ctx = crearAudioCtx();
+    if (!ctx) return;
+    const listo = () => ctx.state === "running";
+    const desbloquear = () => {
+      ctx.resume().catch(() => {});
+      // un sonido mudo de 1 muestra: iOS cuenta el audio como «ya permitido»
+      try {
+        const b = ctx.createBuffer(1, 1, 22050);
+        const s = ctx.createBufferSource();
+        s.buffer = b; s.connect(ctx.destination); s.start(0);
+      } catch { /* nada */ }
+      if (ui && ui.audio && !ui.audio.srcObject) ui.audio.play().catch(() => {});
+      if (listo()) quitar();
+    };
+    const eventos = ["pointerdown", "touchend", "keydown"];
+    const quitar = () => eventos.forEach((e) => document.removeEventListener(e, desbloquear, true));
+    eventos.forEach((e) => document.addEventListener(e, desbloquear, true));
+  }
+
   function tonos(tipo) {
     pararTonos();
-    try {
-      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx.resume();
-    } catch { return; }
+    if (!crearAudioCtx()) return;
+    sesionAudio("playback");
+    audioCtx.resume().catch(() => {});
+    // aún sin ningún toque en la página: el timbre suena en cuanto toquen la pantalla
+    if (audioCtx.state !== "running" && ui && llamada && llamada.estado === "sonando") {
+      ui.estado.textContent = "Llamada entrante · toca la pantalla para oír el timbre";
+    }
     const pita = (frec, dur, vol = 0.08) => {
       const o = audioCtx.createOscillator();
       const g = audioCtx.createGain();
@@ -92,8 +129,8 @@
       o.stop(audioCtx.currentTime + dur);
     };
     const ciclo = tipo === "espera"
-      ? () => pita(425, 1)
-      : () => { pita(880, 0.35, 0.12); setTimeout(() => pita(660, 0.35, 0.12), 400); vibrando = true; vibrar([350, 150, 350]); };
+      ? () => pita(425, 1, 0.12)
+      : () => { pita(880, 0.35, 0.25); setTimeout(() => pita(660, 0.35, 0.25), 400); vibrando = true; vibrar([350, 150, 350]); };
     ciclo();
     relojTono = setInterval(ciclo, tipo === "espera" ? 4000 : 2200);
   }
@@ -101,6 +138,8 @@
     clearInterval(relojTono);
     relojTono = null;
     if (vibrando) { vibrando = false; vibrar(0); }
+    // en la llamada el audio va en modo «llamada» (micrófono + parlante); sin llamada, normal
+    sesionAudio(llamada && llamada.estado !== "finalizada" ? "play-and-record" : "auto");
   }
 
   /* ----------------------------------------------------------
@@ -111,15 +150,21 @@
     const m = sdp.match(/a=rtpmap:(\d+) opus\/48000/i);
     if (!m) return sdp;
     const pt = m[1];
-    const extra = "useinbandfec=1;usedtx=0;stereo=0;maxaveragebitrate=64000";
+    // paquetes de 10 ms (en vez de 20): la voz sale antes, menos retraso
+    const extra = "minptime=10;useinbandfec=1;usedtx=0;stereo=0;maxaveragebitrate=64000";
     const linea = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+    let out;
     if (linea.test(sdp)) {
-      return sdp.replace(linea, (_, params) => {
-        const limpio = params.split(";").filter((p) => !/^(useinbandfec|usedtx|stereo|maxaveragebitrate)=/.test(p.trim()));
+      out = sdp.replace(linea, (_, params) => {
+        const limpio = params.split(";").filter((p) => !/^(minptime|useinbandfec|usedtx|stereo|maxaveragebitrate)=/.test(p.trim()));
         return `a=fmtp:${pt} ${[...limpio, extra].join(";")}`;
       });
+    } else {
+      out = sdp.replace(new RegExp(`(a=rtpmap:${pt} [^\\r\\n]*)`), `$1\r\na=fmtp:${pt} ${extra}`);
     }
-    return sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ${extra}`);
+    // a=ptime junto a la línea de Opus (si ya estaba, se cambia)
+    out = out.replace(/a=ptime:\d+\r\n/g, "");
+    return out.replace(new RegExp(`(a=rtpmap:${pt} [^\\r\\n]*)`), "$1\r\na=ptime:10");
   }
 
   /* ----------------------------------------------------------
@@ -348,7 +393,11 @@
         enviar(llamada.otro.id, "llamada:ice", { id: llamada.id, para: llamada.otro.clave, candidato: candidate.toJSON() });
       }
     };
-    pc.ontrack = ({ streams }) => {
+    pc.ontrack = ({ streams, receiver }) => {
+      /* sin colchón extra: la voz se reproduce apenas llega (el navegador
+         solo guarda lo mínimo para no cortarse) — menos retraso */
+      try { if ("jitterBufferTarget" in receiver) receiver.jitterBufferTarget = 0; } catch { /* nada */ }
+      try { if ("playoutDelayHint" in receiver) receiver.playoutDelayHint = 0; } catch { /* nada */ }
       ui.audio.srcObject = streams[0];
       const p = ui.audio.play();
       if (p) p.catch(() => {
@@ -412,8 +461,9 @@
     }
     const soporte = navigator.mediaDevices.getSupportedConstraints ? navigator.mediaDevices.getSupportedConstraints() : {};
     const audio = { ...AUDIO };
-    // aislamiento de voz (Chrome y Safari recientes): aún menos ruido de fondo
-    if (soporte.voiceIsolation) audio.voiceIsolation = true;
+    /* sin «aislamiento de voz»: filtra más ruido pero agrega retraso a la
+       voz; la supresión de ruido normal ya limpia bien sin demorar */
+    if (soporte.voiceIsolation) audio.voiceIsolation = false;
     try {
       const flujo = await navigator.mediaDevices.getUserMedia({ audio, video: false });
       const pista = flujo.getAudioTracks()[0];
@@ -604,6 +654,7 @@
     if (L.pc) { L.pc.onconnectionstatechange = null; L.pc.close(); }
     ui.audio.srcObject = null;
     L.estado = "finalizada";
+    sesionAudio("auto");
     L.minimizada = false;
     const seg = L.inicio ? Math.floor((Date.now() - L.inicio) / 1000) : 0;
     L.motivo = motivo || `Llamada finalizada${seg ? ` · ${reloj(seg)}` : ""}`;
@@ -681,6 +732,7 @@
       perfil = p;
       if (!window.RTCPeerConnection) return;   // navegador sin WebRTC: sin llamadas
       crearUI();
+      habilitarAudio();
       escucharBuzon();
       pintar();
       Tiempo.onEnLinea((lista) => { ultimoEnLinea = lista; pintarLista(); });

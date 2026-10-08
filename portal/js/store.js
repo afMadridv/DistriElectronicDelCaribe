@@ -512,7 +512,8 @@
     async listarEventos(limite = 20) {
       if (this.isDemo) {
         return lsGet(DEMO_KEYS.eventos, [])
-          .filter((e) => (esGestor(currentProfile) && e.tipo !== "nuevo_dispositivo")
+          .filter((e) => (e.tipo !== "nuevo_dispositivo" && (currentProfile.role === "administrador"
+              || (currentProfile.role === "jefe" && (e.actor_rol === "trabajador" || e.actor_id === currentProfile.id))))
             || (e.tipo === "nuevo_dispositivo" && e.actor_id === currentProfile.id))
           .slice(-limite).reverse();
       }
