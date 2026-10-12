@@ -61,7 +61,7 @@
 
   /* Jefe y Administrador gestionan el portal: usuarios, auditoría, llamadas */
   const esGestor = Store.esGestor;
-  const ROLES = { trabajador: "Trabajador", jefe: "Jefe", administrador: "Administrador" };
+  const ROLES = { trabajador: "Técnico", jefe: "Jefe", administrador: "Administrador" };
   const rolTexto = (r) => ROLES[r] || r;
   const VISTAS = { generar: "Generando formatos", historial: "En el historial", usuarios: "Gestionando usuarios" };
 
@@ -677,10 +677,7 @@
       if (origen.value.trim()) calcular();
     }
 
-    // fecha por defecto hoy
-    const fechaInput = $("#f-fecha");
-    if (fechaInput && !fechaInput.value) fechaInput.value = new Date().toISOString().slice(0, 10);
-
+    // la fecha la escribe quien llena el formato (es obligatoria): no se pone sola
     formDirty = false;
 
     /* auditoría (solo trabajadores) y edición en conjunto (formatos guardados) */
@@ -1178,11 +1175,24 @@
   $("#generate-btn").addEventListener("click", () => saveCotizacion(true));
 
   /* Antes de descargar se propone un nombre y se deja cambiarlo. */
+  /* Antes de descargar se puede cambiar el nombre del PDF (ventana propia:
+     window.prompt no siempre aparece en la app instalada). null = canceló */
   function pedirNombre(formatKey, record) {
     const base = `${FORMATS[formatKey].name} - ${PDFGen.numeroImpreso(formatKey, record) || record.numero || ""}`.trim();
-    const r = window.prompt("Nombre del archivo PDF:", base);
-    if (r === null) return base;          // cancelar = deja el nombre propuesto
-    return r.trim() || base;
+    return new Promise((resolve) => {
+      const modal = $("#nombre-modal"), input = $("#nombre-pdf"), form = $("#nombre-form");
+      const cerrar = modal.querySelector("[data-close-modal]");
+      input.value = base;
+      modal.classList.remove("hidden");
+      setTimeout(() => { input.focus(); input.select(); }, 60);
+      const done = (val) => {
+        modal.classList.add("hidden");
+        form.onsubmit = cerrar.onclick = null;
+        resolve(val);
+      };
+      form.onsubmit = (e) => { e.preventDefault(); done(input.value.trim() || base); };
+      cerrar.onclick = () => done(null);
+    });
   }
 
   /* guarda la cotización; download=false para "guardar y salir" */
@@ -1251,10 +1261,12 @@
       firmasTocadas = new Set();
 
       const num = PDFGen.numeroImpreso(currentFormat, record) || record.numero;
-      if (download) {
+      const nombre = download ? await pedirNombre(currentFormat, record) : null;
+      if (download && nombre === null) toast(`Formato ${num} guardado. No se descargó el PDF.`);
+      if (nombre !== null) {
         etapa = "pdf";
         const rec = await Store.hydrateImages(record);
-        const descarga = await PDFGen.download(currentFormat, rec, pedirNombre(currentFormat, rec));
+        const descarga = await PDFGen.download(currentFormat, rec, nombre);
         const avisado = await NotificationService.formatoDescargado({
           numero: num, formato: format.name, cliente: data.cliente, url: descarga.url, nombre: descarga.nombre,
         });
@@ -1263,7 +1275,7 @@
       }
       formDirty = false;
       $("#save-status").textContent = "✓ Guardado en el historial";
-      if (!download) toast(`Cotización ${num} guardada.`);
+      if (!download) toast(`Formato ${num} guardado.`);
       actualizarAlmacenamiento();
       return true;
     } catch (e) {
@@ -1330,19 +1342,21 @@
 
     if (!rows.length) {
       list.innerHTML = `<div class="empty-state"><div class="es-icon">${window.ICONS.folder}</div>
-        ${q ? "Sin resultados para la búsqueda." : "Aún no hay cotizaciones. Genera la primera desde «Generar Cotización»."}</div>`;
+        ${q ? "Sin resultados para la búsqueda." : "Aún no hay formatos. Genera el primero desde «Generar Formato»."}</div>`;
       return;
     }
 
     list.innerHTML = rows.map((c) => {
       const fmt = FORMATS[c.format_type] || { icon: window.ICONS.folder, name: c.format_type };
-      const fecha = new Date(c.updated_at).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
+      const fecha = (d) => new Date(d).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+      const quien = c.updated_by_name || c.owner_name;
       return `
       <div class="hist-card" data-id="${c.id}">
         <div class="hist-icon">${fmt.icon}</div>
         <div class="hist-info">
           <strong>${escapeHtml(c.cliente || "Sin cliente")}</strong>
-          <small>${fmt.name} · ${fecha}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
+          <small>${fmt.name} · Creado: ${fecha(c.created_at)}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
+          <small class="hist-mod">Última modificación: ${fecha(c.updated_at)}${quien ? " · " + escapeHtml(quien) : ""}</small>
         </div>
         <span class="hist-num" title="Consecutivo del sistema: ${escapeHtml(c.numero)}">${escapeHtml(c.no_doc ? `No. OTT ${c.no_doc}` : c.numero)}</span>
         <div class="hist-actions">
@@ -1364,8 +1378,10 @@
         e.target.disabled = true;
         try {
           const rec = await Store.getCotizacion(id);
+          const nombre = await pedirNombre(rec.format_type, rec);
+          if (nombre === null) return;
           const listo = await Store.hydrateImages(rec);
-          const descarga = await PDFGen.download(rec.format_type, listo, pedirNombre(rec.format_type, listo));
+          const descarga = await PDFGen.download(rec.format_type, listo, nombre);
           NotificationService.formatoDescargado({
             numero: PDFGen.numeroImpreso(rec.format_type, rec) || rec.numero,
             formato: (FORMATS[rec.format_type] || {}).name, cliente: (rec.data || {}).cliente,
@@ -1377,12 +1393,12 @@
       });
       card.querySelector('[data-act="del"]').addEventListener("click", async () => {
         const rec = historialCache.find((c) => c.id === id);
-        const ok = await showConfirm("Eliminar cotización",
+        const ok = await showConfirm("Eliminar formato",
           `Se eliminará ${rec.numero} (${rec.cliente || "sin cliente"}) junto con sus fotos. Esta acción no se puede deshacer.`);
         if (!ok) return;
         try {
           await Store.deleteCotizacion(id);
-          toast("Cotización eliminada.");
+          toast("Formato eliminado.");
           renderHistorial();
           actualizarAlmacenamiento();
         } catch (e) { toast(e.message || "Error al eliminar.", "error"); }
@@ -1440,7 +1456,7 @@
       const delBtn = card.querySelector('[data-act="del"]');
       if (delBtn) delBtn.addEventListener("click", async () => {
         const ok = await showConfirm("Eliminar usuario",
-          `Se eliminará el acceso de ${u.name} (${u.email}). Sus cotizaciones se conservan y quedan visibles solo para los Jefes.`);
+          `Se eliminará el acceso de ${u.name} (${u.email}). Sus formatos se conservan y quedan visibles solo para los Jefes.`);
         if (!ok) return;
         try {
           await Store.deleteUser(id);

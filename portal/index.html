@@ -39,13 +39,12 @@
       <div class="login-brand">
         <div class="brand-mark">D</div>
         <h1>DistriElectronic<span>DelCaribe</span></h1>
-        <p class="login-sub">Portal de Cotizaciones</p>
+        <p class="login-sub">Portal de Formatos</p>
       </div>
       <form id="login-form" autocomplete="on">
         <label class="field">
           <span>Usuario</span>
           <input type="text" id="login-email" required autocomplete="username" />
-          <small class="field-hint">Solo tu usuario: el dominio @distrielectronicdelcaribe.com se agrega solo.</small>
         </label>
         <label class="field">
           <span>Contraseña</span>
@@ -94,9 +93,9 @@
         </button>
       </div>
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="generar" title="Generar Cotización">
+        <button class="nav-item active" data-view="generar" title="Generar Formato">
           <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
-          <span class="nav-label">Generar Cotización</span>
+          <span class="nav-label">Generar Formato</span>
         </button>
         <button class="nav-item" data-view="historial" title="Historial / Editar">
           <svg viewBox="0 0 24 24"><path d="M12 8v4l3 3M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
@@ -157,7 +156,7 @@
       <!-- ===== GENERAR ===== -->
       <section id="view-generar" class="view">
         <header class="view-header">
-          <h2>Generar Cotización</h2>
+          <h2>Generar Formato</h2>
           <p>Selecciona un formato y completa los datos. El PDF se genera al instante.</p>
         </header>
 
@@ -205,8 +204,8 @@
       <!-- ===== HISTORIAL ===== -->
       <section id="view-historial" class="view hidden">
         <header class="view-header">
-          <h2>Historial de Cotizaciones</h2>
-          <p>Edita cualquier cotización sin rellenar todo de nuevo.</p>
+          <h2>Historial de Formatos</h2>
+          <p>Edita cualquier formato sin rellenar todo de nuevo.</p>
         </header>
         <div class="toolbar">
           <input type="search" id="search-historial" class="search-input" placeholder="Buscar por cliente, formato o número…" />
@@ -245,7 +244,7 @@
         <label class="field" id="uf-password-field"><span>Contraseña</span><input type="password" id="uf-password" minlength="6" placeholder="Mínimo 6 caracteres" /></label>
         <label class="field"><span>Rol</span>
           <select id="uf-role" aria-describedby="uf-role-hint">
-            <option value="trabajador">Trabajador</option>
+            <option value="trabajador">Técnico</option>
             <option value="jefe">Jefe</option>
             <option value="administrador">Administrador</option>
           </select>
@@ -275,12 +274,30 @@
   <div id="exit-modal" class="modal-overlay hidden">
     <div class="modal modal-sm">
       <h3>Tienes cambios sin guardar</h3>
-      <p class="confirm-text">Si sales ahora, el progreso de esta cotización se perderá.</p>
+      <p class="confirm-text">Si sales ahora, el progreso de este formato se perderá.</p>
       <div class="modal-actions modal-actions-stack">
         <button type="button" class="btn btn-primary" id="exit-save">Guardar cambios y salir</button>
         <button type="button" class="btn btn-danger" id="exit-discard">Salir sin guardar</button>
         <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL NOMBRE DEL PDF ===== -->
+  <div id="nombre-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Nombre del PDF</h3>
+      <form id="nombre-form">
+        <label class="field">
+          <span>Así se guardará el archivo</span>
+          <input type="text" id="nombre-pdf" required maxlength="120" autocomplete="off" enterkeyhint="done" />
+          <small class="field-hint">Se le agrega «.pdf» al final.</small>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+          <button type="submit" class="btn btn-primary">Descargar</button>
+        </div>
+      </form>
     </div>
   </div>
 

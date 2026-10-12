@@ -456,7 +456,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 }
 .hist-info { flex: 1; min-width: 0; }
 .hist-info strong { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hist-info small { color: var(--gray-500); font-size: 12.5px; }
+.hist-info small { display: block; color: var(--gray-500); font-size: 12.5px; }
+.hist-info .hist-mod { margin-top: 2px; color: var(--gray-700); }
 .hist-num { font-size: 12px; font-weight: 700; color: var(--gray-500); background: var(--gray-100); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
 .hist-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .empty-state {

@@ -31,7 +31,7 @@
   };
   const TIEMPO_TIMBRE = 35000;        // ms sonando antes de darse por no contestada
   const REENVIO_OFERTA = 3000;        // la oferta se repite por si el otro abre el portal tarde
-  const ROLES = { trabajador: "Trabajador", jefe: "Jefe", administrador: "Administrador" };
+  const ROLES = { trabajador: "Técnico", jefe: "Jefe", administrador: "Administrador" };
   const GESTORES = ["jefe", "administrador"];
 
   const ICONOS = {
@@ -176,10 +176,10 @@
     raiz.id = "llamadas";
     raiz.className = "llamadas";
     raiz.innerHTML = `
-      <button type="button" class="burbuja burbuja-llamar hidden" aria-haspopup="dialog" aria-expanded="false" aria-label="Llamar a un trabajador">
+      <button type="button" class="burbuja burbuja-llamar hidden" aria-haspopup="dialog" aria-expanded="false" aria-label="Llamar a un técnico">
         ${ICONOS.fono}<span class="burbuja-cuenta" hidden>0</span>
       </button>
-      <section class="llamar-panel hidden" role="dialog" aria-label="Llamar a un trabajador">
+      <section class="llamar-panel hidden" role="dialog" aria-label="Llamar a un técnico">
         <header><strong>Llamar</strong><small>Personas conectadas ahora</small>
           <button type="button" class="llamada-icono" data-cerrar-panel aria-label="Cerrar">${ICONOS.cerrar}</button></header>
         <ul class="llamar-lista"></ul>

@@ -18,7 +18,7 @@ window.APP_CONFIG = {
      Se genera con  npx web-push generate-vapid-keys  (la privada va
      solo en los secretos de Supabase, nunca aquí). Vacía = sin push;
      los avisos siguen llegando mientras el portal esté abierto. */
-  VAPID_PUBLIC_KEY: "BMbnzcraJVFBM6AZC-xuxtjJBVDjWcrCLBrAcER8DI6kM44Lcs8MnfJzpKbUhtxiUQFyo2N4fzrvmlDSSyCdpnw",
+  VAPID_PUBLIC_KEY: "BC7mBB6nplOdS3W5o2Ikgtb0W1XvWRxU6chEO5FxBKkmds13EK2EueFhl8ChaArzsbk3CfKvd73KZQiavwJk26A",
   /* Llamadas: servidores TURN opcionales para redes muy cerradas
      (algunas móviles o corporativas). Ejemplo:
      [{ urls: "turn:turn.ejemplo.com:3478", username: "u", credential: "c" }] */

@@ -98,7 +98,7 @@
     if (!lsGet(DEMO_KEYS.users, null)) {
       lsSet(DEMO_KEYS.users, [
         { id: uid(), name: "Jefe Demo", email: "jefe@demo.com", password: "demo1234", role: "jefe" },
-        { id: uid(), name: "Trabajador Demo", email: "trabajador@demo.com", password: "demo1234", role: "trabajador" },
+        { id: uid(), name: "Técnico Demo", email: "tecnico@demo.com", password: "demo1234", role: "trabajador" },
       ]);
     }
     if (!lsGet(DEMO_KEYS.cots, null)) lsSet(DEMO_KEYS.cots, []);
@@ -227,7 +227,7 @@
         const { data, error } = await sb
           .from("cotizaciones")
           // no_doc: el No. OTT que se escribe a mano en el UPS (se muestra en el historial)
-          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, cliente:data->>cliente, no_doc:data->>no_ott")
+          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, updated_by_name, cliente:data->>cliente, no_doc:data->>no_ott")
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
@@ -250,7 +250,7 @@
         const cot = {
           id: uid(), numero, format_type, data,
           user_id: currentProfile.id, owner_name: currentProfile.name,
-          created_at: now, updated_at: now,
+          created_at: now, updated_at: now, updated_by_name: currentProfile.name,
         };
         const all = lsGet(DEMO_KEYS.cots, []);
         all.push(cot);
@@ -270,9 +270,10 @@
       if (this.isDemo) {
         const all = lsGet(DEMO_KEYS.cots, []);
         const idx = all.findIndex((c) => c.id === id);
-        if (idx === -1) throw new Error("Cotización no encontrada.");
+        if (idx === -1) throw new Error("Formato no encontrado.");
         all[idx].data = data;
         all[idx].updated_at = now;
+        all[idx].updated_by_name = currentProfile.name;
         lsSet(DEMO_KEYS.cots, all);
         return all[idx];
       }

@@ -33,6 +33,7 @@ const PLANTILLAS = {
   /* ===== FORMATO DE ACTIVIDADES (A4 595x842) ===== */
   actividades: {
     file: "FORMATO DE ACTIVIDADES.pdf",
+    titulo: "FORMATO DE ACTIVIDADES",   // encabezado de las hojas de continuación
     text: [
       { key: "cliente", page: 0, x: 139.2, y: 714.2, size: 9, maxW: 181, c: 1 },
       { key: "ciudad", page: 0, x: 369.8, y: 714.2, size: 9, maxW: 130.9, c: 1 },
@@ -43,13 +44,16 @@ const PLANTILLAS = {
       { key: "nombre_trabajador", page: 0, x: 332.9, y: 122, size: 8, maxW: 155, c: 1 },
     ],
     items: [
-      { key: "actividades", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 642.3, step: 12, max: 16, descMaxW: 356, size: 8 },
+      // lo que pase de las 16 filas sigue en una hoja de continuación
+      { key: "actividades", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 642.3, step: 12, max: 16, descMaxW: 356, size: 8,
+        continua: "ACTIVIDAD REALIZADA", columnas: ["ITEM", "DESCRIPCIÓN"] },
       // material utilizado en la mitad izquierda de «DESCRIPCIÓN»; vacío = «Ninguno»
-      { key: "materiales", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 410.2, step: 12, max: 18, descMaxW: 174, size: 8, vacio: "Ninguno" },
+      { key: "materiales", page: 0, cantX: 83.9, cantW: 62.7, descX: 153, y0: 410.2, step: 12, max: 18, descMaxW: 174, size: 8, vacio: "Ninguno",
+        continua: "MATERIAL UTILIZADO", columnas: ["CANTIDAD", "MATERIAL UTILIZADO"] },
     ],
     // anotaciones en la mitad derecha, renglón por renglón de la tabla
     wrap: [
-      { key: "anotaciones", page: 0, x: 335.5, y0: 410.2, lh: 12, maxW: 172, maxLines: 18, size: 8 },
+      { key: "anotaciones", page: 0, x: 335.5, y0: 410.2, lh: 12, maxW: 172, maxLines: 18, size: 8, continua: "ANOTACIONES" },
     ],
     /* la columna «DESCRIPCIÓN» se parte en dos: se tapa su rótulo, se traza
        la línea del medio (x 331.3, del borde de arriba al de abajo de la
@@ -57,11 +61,13 @@ const PLANTILLAS = {
     parches: [
       {
         page: 0,
-        blanco: [[149.6, 419.6, 363.4, 11]],
+        // y «FIRMA DEL TRABAJADOR» pasa a «FIRMA DEL TÉCNICO», con la misma letra
+        blanco: [[149.6, 419.6, 363.4, 11], [332, 133, 124, 10.8]],
         lineas: [[331.3, 431.1, 331.3, 203, 0.8]],
         rotulos: [
           { t: "MATERIAL UTILIZADO", x0: 148.9, x1: 331.3, y: 421.8, size: 8.5 },
           { t: "ANOTACIONES", x0: 331.3, x1: 513.8, y: 421.8, size: 8.5 },
+          { t: "FIRMA DEL TÉCNICO", x0: 332.9, y: 135.5, size: 10, serif: true },
         ],
       },
     ],

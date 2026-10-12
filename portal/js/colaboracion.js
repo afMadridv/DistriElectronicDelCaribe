@@ -33,7 +33,7 @@
     return COLORES[h % COLORES.length];
   }
   const inicial = (n) => (String(n || "?").trim().charAt(0) || "?").toUpperCase();
-  const ROLES = { trabajador: "Trabajador", jefe: "Jefe", administrador: "Administrador" };
+  const ROLES = { trabajador: "Técnico", jefe: "Jefe", administrador: "Administrador" };
 
   function otros() {
     return canal ? canal.miembros().filter((m) => m.clave !== Tiempo.idPestana) : [];

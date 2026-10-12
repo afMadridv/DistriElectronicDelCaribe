@@ -293,8 +293,11 @@ async function build(formatKey, record, opts = {}) {
     }
     for (const r of pa.rotulos || []) {
       const s = r.size || 8;
-      const w = bold.widthOfTextAtSize(r.t, s);
-      pg.drawText(r.t, { x: r.x0 + (r.x1 - r.x0 - w) / 2, y: r.y, size: s, font: bold, color: rgb(0, 0, 0) });
+      // serif: imita la letra de la plantilla; sin x1 el rótulo va alineado a la izquierda
+      const f = r.serif ? await doc.embedFont(StandardFonts.TimesRomanBold) : bold;
+      const w = f.widthOfTextAtSize(r.t, s);
+      const x = r.x1 != null ? r.x0 + (r.x1 - r.x0 - w) / 2 : r.x0;
+      pg.drawText(r.t, { x, y: r.y, size: s, font: f, color: rgb(0, 0, 0) });
     }
   }
 
@@ -332,14 +335,28 @@ async function build(formatKey, record, opts = {}) {
     });
   }
 
+  /* Lo que no cabe en la plantilla (con `continua`) no se pierde: sigue en
+     hojas de continuación al final, antes de las fotos. */
+  const continuacion = [];   // { titulo, filas: [{ cant, texto }] } o { titulo, texto }
+  // nota pequeña bajo la tabla, alineada a su borde derecho
+  const avisoSigue = (page, xDer, y) => {
+    const t = "Continúa en la hoja siguiente";
+    page.drawText(t, { x: xDer - font.widthOfTextAtSize(t, 6.5), y, size: 6.5, font, color: INK });
+  };
+
   /* texto multilínea */
   for (const w of cfg.wrap || []) {
     const val = data[w.key];
     if (!val) continue;
-    const lines = wrapText(font, val, w.size || 8, w.maxW).slice(0, w.maxLines || 8);
-    lines.forEach((line, i) => {
+    const todas = wrapText(font, val, w.size || 8, w.maxW);
+    const max = w.maxLines || 8;
+    todas.slice(0, max).forEach((line, i) => {
       drawText(P(w.page), line, w.x, w.y0 - i * w.lh, w.size || 8, w.maxW + 10);
     });
+    if (w.continua && todas.length > max) {
+      continuacion.push({ titulo: w.continua, texto: todas.slice(max).join(" ") });
+      avisoSigue(P(w.page), w.x + w.maxW, w.y0 - max * w.lh);
+    }
   }
 
   /* Tablas de ítems. Una descripción larga ocupa varias filas de la tabla
@@ -351,19 +368,21 @@ async function build(formatKey, record, opts = {}) {
     // sin filas escritas, la tabla dice algo («Ninguno») en vez de quedar en blanco
     if (!rows.length && it.vacio) rows = [{ cant: "", descripcion: it.vacio }];
     const size = it.size || 8;
+    const sigue = [];
     let fila = 0;
     for (const r of rows) {
-      if (fila >= it.max) break;
-      const lineas = wrapText(font, r.descripcion, size, it.descMaxW)
-        .slice(0, it.max - fila);
-      lineas.forEach((linea, n) => {
-        const y = it.y0 - (fila + n) * it.step;
-        if (n === 0) {
-          drawText(P(it.page), String(r.cant ?? ""), it.cantX, y, size, it.cantW || 35, false, true);
-        }
+      wrapText(font, r.descripcion, size, it.descMaxW).forEach((linea, n) => {
+        const cant = n === 0 ? String(r.cant ?? "") : "";
+        if (fila >= it.max) { sigue.push({ cant, texto: linea }); return; }
+        const y = it.y0 - fila * it.step;
+        drawText(P(it.page), cant, it.cantX, y, size, it.cantW || 35, false, true);
         drawText(P(it.page), linea, it.descX, y, size, it.descMaxW);
+        fila++;
       });
-      fila += lineas.length;
+    }
+    if (it.continua && sigue.length) {
+      continuacion.push({ titulo: it.continua, columnas: it.columnas, filas: sigue });
+      avisoSigue(P(it.page), it.descX + it.descMaxW, it.y0 - it.max * it.step);
     }
   }
 
@@ -478,6 +497,70 @@ async function build(formatKey, record, opts = {}) {
     const w = img.width * scale, h = img.height * scale;
     /* cx centra la firma sobre la línea en vez de anclarla por la izquierda */
     P(s.page).drawImage(img, { x: s.cx != null ? s.cx - w / 2 : s.x, y: s.y, width: w, height: h });
+  }
+
+  /* ---------- HOJAS DE CONTINUACIÓN ----------
+     Del tamaño de la plantilla: encabezado con el logo, el formato y sus
+     datos, y cada parte que no cupo en su propia tabla (ÍTEM | DESCRIPCIÓN,
+     o una sola columna para el texto). */
+  if (continuacion.length) {
+    const { width: W, height: H } = pages[0].getSize();
+    const logo = await embedImg(doc, opts.logo || logoURL());
+    const NEGRO = rgb(0, 0, 0);
+    const MX = 50, PASO = 14, LETRA = 9, PIE = 50;
+    const x0 = MX, x1 = W - MX, xm = MX + 62;
+    let page, y;
+
+    const hoja = () => {
+      page = doc.addPage([W, H]);
+      if (logo) {
+        const alto = 42, ancho = logo.width * (alto / logo.height);
+        page.drawImage(logo, { x: MX, y: H - 70, width: ancho, height: alto });
+      }
+      const titulo = cfg.titulo || "FORMATO";
+      page.drawText(titulo, { x: (W - bold.widthOfTextAtSize(titulo, 13)) / 2, y: H - 52, size: 13, font: bold, color: NEGRO });
+      const sub = "Continuación";
+      page.drawText(sub, { x: (W - font.widthOfTextAtSize(sub, 9)) / 2, y: H - 65, size: 9, font, color: NEGRO });
+      const datos = [numeroDoc, data.cliente, fmtDate(data.fecha)].filter(Boolean).join("  ·  ");
+      drawText(page, datos, MX, H - 92, 9, x1 - MX, false, true);
+      page.drawLine({ start: { x: MX, y: H - 100 }, end: { x: x1, y: H - 100 }, thickness: 1.5, color: rgb(1, 0.77, 0) });
+      y = H - 122;
+    };
+    const celda = (xa, xb, alto, relleno) => page.drawRectangle({
+      x: xa, y: y - alto + PASO - 4, width: xb - xa, height: alto,
+      borderColor: NEGRO, borderWidth: 0.6, ...(relleno ? { color: rgb(0.93, 0.93, 0.93) } : {}),
+    });
+    const encabezado = (sec, sigueDe) => {
+      if (!page || y - PASO * 3 < PIE) hoja();
+      const t = sec.titulo + (sigueDe ? " (continuación)" : "");
+      page.drawText(t, { x: x0, y, size: 11, font: bold, color: NEGRO });
+      y -= PASO + 6;
+      if (!sec.filas) return;
+      const [cItem, cDesc] = sec.columnas || ["ITEM", "DESCRIPCIÓN"];
+      celda(x0, xm, PASO, true); celda(xm, x1, PASO, true);
+      page.drawText(cItem, { x: x0 + (xm - x0 - bold.widthOfTextAtSize(cItem, 8)) / 2, y, size: 8, font: bold, color: NEGRO });
+      page.drawText(cDesc, { x: xm + (x1 - xm - bold.widthOfTextAtSize(cDesc, 8)) / 2, y, size: 8, font: bold, color: NEGRO });
+      y -= PASO;
+    };
+
+    for (const sec of continuacion) {
+      const filas = sec.filas
+        || wrapText(font, sec.texto, LETRA, x1 - x0 - 10).map((texto) => ({ texto }));
+      encabezado(sec, true);
+      for (const f of filas) {
+        if (y < PIE) { hoja(); encabezado(sec, true); }
+        if (sec.filas) {
+          celda(x0, xm, PASO); celda(xm, x1, PASO);
+          drawText(page, f.cant, x0, y, LETRA, xm - x0, false, true);
+          drawText(page, f.texto, xm + 5, y, LETRA, x1 - xm - 10);
+        } else {
+          celda(x0, x1, PASO);
+          drawText(page, f.texto, x0 + 5, y, LETRA, x1 - x0 - 10);
+        }
+        y -= PASO;
+      }
+      y -= PASO;
+    }
   }
 
   /* ---------- REGISTRO FOTOGRÁFICO ----------

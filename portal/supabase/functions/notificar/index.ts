@@ -37,6 +37,17 @@ function cabecerasCors(req: Request): Record<string, string> {
   return h;
 }
 
+/* los secretos a veces se pegan con comillas, el nombre delante
+   ("VAPID_PRIVATE_KEY=..."), texto extra o en Base64 normal; web-push
+   solo acepta Base64 URL-safe sin "=". Se toma la clave del texto:
+   la privada mide 43 caracteres y la pública 87 */
+const limpiarTexto = (s?: string) => (s ?? "").trim().replace(/^["']+|["']+$/g, "").trim();
+const limpiarClave = (s: string | undefined, largo: number) => {
+  const partes = (s ?? "").match(/[A-Za-z0-9_\-+/]{20,}/g) ?? [];
+  const clave = partes.find((p) => p.length === largo) ?? partes.sort((a, b) => b.length - a.length)[0] ?? "";
+  return clave.replace(/\+/g, "-").replace(/\//g, "_");
+};
+
 const CATEGORIA: Record<string, string> = {
   ingreso: "ingresos",
   formato_abierto: "formatos_abiertos",
@@ -45,7 +56,7 @@ const CATEGORIA: Record<string, string> = {
   nuevo_dispositivo: "seguridad",
   llamada: "llamadas",
 };
-const ROLES: Record<string, string> = { trabajador: "Trabajador", jefe: "Jefe", administrador: "Administrador" };
+const ROLES: Record<string, string> = { trabajador: "Técnico", jefe: "Jefe", administrador: "Administrador" };
 
 type Evento = {
   id: number; tipo: string; actor_id: string; actor_nombre: string | null; actor_rol: string | null;
@@ -55,7 +66,7 @@ type Evento = {
 /* mismos textos que muestra el portal (js/notificaciones.js) */
 function texto(ev: Evento) {
   const d = (ev.detalle ?? {}) as Record<string, string | boolean>;
-  const quien = ev.actor_nombre || "Un trabajador";
+  const quien = ev.actor_nombre || "Un técnico";
   const doc = [d.formato, d.no_doc ? `No. OTT ${d.no_doc}` : d.numero, d.cliente].filter(Boolean).join(" · ");
   const hora = new Date(ev.created_at).toLocaleString("es-CO", {
     timeZone: "America/Bogota", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
@@ -97,10 +108,18 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const pub = Deno.env.get("VAPID_PUBLIC_KEY");
-    const priv = Deno.env.get("VAPID_PRIVATE_KEY");
+    const pub = limpiarClave(Deno.env.get("VAPID_PUBLIC_KEY"), 87);
+    const priv = limpiarClave(Deno.env.get("VAPID_PRIVATE_KEY"), 43);
     if (!pub || !priv) return json({ ok: false, motivo: "Push sin configurar (faltan las claves VAPID)." });
-    webpush.setVapidDetails(Deno.env.get("VAPID_SUBJECT") || "mailto:distrielectronicdelcaribe@live.com", pub, priv);
+    const sujeto = limpiarTexto(Deno.env.get("VAPID_SUBJECT"));
+    try {
+      webpush.setVapidDetails(/^(mailto:|https:)/.test(sujeto) ? sujeto : "mailto:distrielectronicdelcaribe@live.com", pub, priv);
+    } catch (e) {
+      // solo los largos, nunca las claves
+      const motivo = `${(e as Error).message} (largo pública ${pub.length}/87, privada ${priv.length}/43)`;
+      console.error("notificar:", motivo);
+      return json({ error: motivo }, 500);
+    }
 
     // 1. Quién llama
     const caller = createClient(url, anon, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
@@ -127,7 +146,7 @@ Deno.serve(async (req) => {
       const para = String((ev.detalle as Record<string, unknown>).para ?? "");
       if (para) destinatarios = [para];
     } else {
-      /* lo que hace un trabajador les llega a los Jefes y al Administrador;
+      /* lo que hace un técnico les llega a los Jefes y al Administrador;
          lo que hace un Jefe, solo al Administrador */
       const roles = ev.actor_rol === "trabajador" ? ["jefe", "administrador"]
         : ev.actor_rol === "jefe" ? ["administrador"] : [];
@@ -165,11 +184,13 @@ Deno.serve(async (req) => {
       } catch (e) {
         // suscripción vencida o revocada por el navegador: se borra
         const code = (e as { statusCode?: number }).statusCode;
+        console.error("push", code, (e as { body?: string }).body ?? (e as Error).message);
         if (code === 404 || code === 410) await admin.from("push_suscripciones").delete().eq("endpoint", s.endpoint);
       }
     }));
     return json({ ok: true, enviadas });
   } catch (e) {
+    console.error("notificar:", (e as Error).message);
     return json({ error: (e as Error).message }, 500);
   }
 });

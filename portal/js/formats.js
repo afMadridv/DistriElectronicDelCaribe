@@ -63,8 +63,8 @@ window.FORMATS = {
       { section: "Firmas" },
       { key: "firma_funcionario", label: "Firma del funcionario", type: "signature", nameKey: "nombre_funcionario" },
       { key: "nombre_funcionario", label: "Nombre del funcionario", type: "text", half: true },
-      { key: "firma_trabajador", label: "Firma del trabajador", type: "signature", nameKey: "nombre_trabajador", own: true },
-      { key: "nombre_trabajador", label: "Nombre del trabajador", type: "text", half: true },
+      { key: "firma_trabajador", label: "Firma del técnico", type: "signature", nameKey: "nombre_trabajador", own: true },
+      { key: "nombre_trabajador", label: "Nombre del técnico", type: "text", half: true },
     ],
   },
 

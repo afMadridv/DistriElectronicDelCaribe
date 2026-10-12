@@ -6,7 +6,7 @@
    Al cambiar archivos del portal, sube VERSION: así cada equipo
    descarga lo nuevo y borra la caché vieja.
    ============================================================ */
-const VERSION = "2026-10-08.2";
+const VERSION = "2026-10-12.1";
 const CACHE_APP = `dec-app-${VERSION}`;
 const CACHE_LIBS = `dec-libs-${VERSION}`;
 

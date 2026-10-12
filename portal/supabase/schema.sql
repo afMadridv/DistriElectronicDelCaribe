@@ -148,20 +148,43 @@ drop policy if exists "cot_delete" on public.cotizaciones;
 create policy "cot_delete" on public.cotizaciones
   for delete using (user_id = auth.uid() or public.is_jefe());
 
--- La fecha de modificación la pone el servidor, no el reloj del navegador.
+-- Quién lo modificó por última vez (se ve en el historial).
+alter table public.cotizaciones add column if not exists updated_by uuid references auth.users (id) on delete set null;
+alter table public.cotizaciones add column if not exists updated_by_name text;
+-- se rellena con el dueño SIN pasar por el trigger, que pondría la fecha de hoy a todo
+do $$
+declare
+  hay boolean := exists (select 1 from pg_trigger
+    where tgname = 'cot_updated_at' and tgrelid = 'public.cotizaciones'::regclass);
+begin
+  if hay then alter table public.cotizaciones disable trigger cot_updated_at; end if;
+  update public.cotizaciones set updated_by = user_id, updated_by_name = owner_name
+    where updated_by is null and updated_by_name is null;
+  if hay then alter table public.cotizaciones enable trigger cot_updated_at; end if;
+end;
+$$;
+
+-- La fecha de modificación y quién la hizo los pone el servidor, no el
+-- navegador: así nadie puede firmar un cambio a nombre de otro.
 create or replace function public.tocar_updated_at()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   new.updated_at := now();
+  if auth.uid() is not null then
+    new.updated_by := auth.uid();
+    new.updated_by_name := coalesce((select full_name from public.profiles where id = auth.uid()), new.updated_by_name);
+  end if;
   return new;
 end;
 $$;
 
 drop trigger if exists cot_updated_at on public.cotizaciones;
 create trigger cot_updated_at
-  before update on public.cotizaciones
+  before insert or update on public.cotizaciones
   for each row execute function public.tocar_updated_at();
 
 

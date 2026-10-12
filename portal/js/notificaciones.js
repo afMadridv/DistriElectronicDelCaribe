@@ -30,20 +30,20 @@
       roles: GESTORES,
     },
     ingresos: {
-      titulo: "Un trabajador entra al portal",
-      tituloAdmin: "Un trabajador o un Jefe entra al portal",
+      titulo: "Un técnico entra al portal",
+      tituloAdmin: "Un técnico o un Jefe entra al portal",
       desc: "Con el dispositivo y el navegador que usa.",
       roles: GESTORES,
     },
     formatos_abiertos: {
-      titulo: "Un trabajador abre o empieza a editar un formato",
-      tituloAdmin: "Un trabajador o un Jefe abre o edita un formato",
+      titulo: "Un técnico abre o empieza a editar un formato",
+      tituloAdmin: "Un técnico o un Jefe abre o edita un formato",
       desc: "Para saber en qué está trabajando cada quien.",
       roles: GESTORES,
     },
     formatos_completados: {
-      titulo: "Un trabajador completa o firma un formato",
-      tituloAdmin: "Un trabajador o un Jefe completa o firma un formato",
+      titulo: "Un técnico completa o firma un formato",
+      tituloAdmin: "Un técnico o un Jefe completa o firma un formato",
       desc: "Cuando lo guarda en el historial.",
       roles: GESTORES,
     },
@@ -239,7 +239,7 @@
      Edge Function «notificar» para el push)
      ---------------------------------------------------------- */
   function textoEvento(ev) {
-    const quien = ev.actor_nombre || (ev.actor_rol === "jefe" ? "Un Jefe" : "Un trabajador");
+    const quien = ev.actor_nombre || (ev.actor_rol === "jefe" ? "Un Jefe" : "Un técnico");
     const d = ev.detalle || {};
     const doc = [d.formato, d.no_doc ? `No. OTT ${d.no_doc}` : d.numero, d.cliente].filter(Boolean).join(" · ");
     const hora = new Date(ev.created_at || Date.now())
@@ -322,8 +322,16 @@
     const reg = await registroSW();
     if (!reg || !reg.pushManager) return;
     try {
+      const clave = claveVapid();
       let sub = await reg.pushManager.getSubscription();
-      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveVapid() });
+      // si la clave VAPID cambió, la suscripción vieja ya no sirve: se rehace
+      const vieja = sub && sub.options && sub.options.applicationServerKey;
+      if (sub && vieja && new Uint8Array(vieja).join() !== clave.join()) {
+        await Store.borrarSuscripcion(sub.endpoint).catch(() => {});
+        await sub.unsubscribe();
+        sub = null;
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: clave });
       await Store.guardarSuscripcion(sub, prefs, Dispositivo.id());
     } catch (e) {
       console.warn("push:", e && e.message);
