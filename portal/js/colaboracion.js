@@ -150,13 +150,26 @@
         uid: ctx.perfil.id, nombre: ctx.perfil.name, rol: ctx.perfil.role,
         color: colorDe(ctx.perfil.id), foco: null, desde: Date.now(),
       };
-      try {
-        await canal.conectar(meta);
-        // pide lo que los demás llevan escrito y aún no está guardado
-        canal.enviar("pedir-estado", { de: yo });
-      } catch (e) {
-        console.warn("edición en conjunto no disponible:", e && e.message);
-        ctx.aviso("No se pudo conectar la edición en conjunto; puedes seguir trabajando normalmente.", "error");
+      /* El servidor de tiempo real a veces falla un momento: se reintenta
+         en silencio y solo se avisa si sigue sin conectar. */
+      const este = canal;
+      for (let intento = 1; ; intento++) {
+        try {
+          await este.conectar(meta);
+          if (canal !== este) return;   // ya salió de este formato
+          // pide lo que los demás llevan escrito y aún no está guardado
+          canal.enviar("pedir-estado", { de: yo });
+          return;
+        } catch (e) {
+          if (canal !== este) return;
+          console.warn(`edición en conjunto, intento ${intento}:`, e && e.message);
+          if (intento >= 3) {
+            ctx.aviso("La edición en conjunto no está disponible ahora (falla del servidor de Supabase). Puedes seguir trabajando y guardar normalmente.", "ok");
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 2000 * intento));
+          if (canal !== este) return;
+        }
       }
     },
 

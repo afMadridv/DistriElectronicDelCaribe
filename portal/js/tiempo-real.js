@@ -103,16 +103,21 @@
         const { data } = await sb.auth.getSession();
         if (data.session) await sb.realtime.setAuth(data.session.access_token);
       } catch { /* se sigue: supabase-js también lo pone solo */ }
+      // un intento anterior que falló no debe quedar colgado
+      if (this.ch) { const viejo = this.ch; this.ch = null; sb.removeChannel(viejo); }
       this.ch = this._crear();
       await new Promise((ok, mal) => {
         const espera = setTimeout(() => mal(new Error("tiempo de espera agotado")), 12000);
-        this.ch.subscribe(async (estado, err) => {
+        this.ch.subscribe((estado, err) => {
           if (estado === "SUBSCRIBED") {
             clearTimeout(espera);
             this.listo = true;
-            if (this.presencia && this.meta) await this.ch.track(this.meta);
             this.alEstado && this.alEstado("conectado");
             ok();
+            /* la presencia («quién está») va aparte: si el servidor de
+               Supabase tarda en registrarla, los mensajes igual funcionan.
+               Al reconectarse solo, supabase-js vuelve a pasar por aquí. */
+            if (this.presencia && this.meta) this._marcarPresencia();
           } else if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
             clearTimeout(espera);
             this.listo = false;
@@ -125,6 +130,16 @@
         });
       });
       return this;
+    }
+
+    /* registra la presencia; si el servidor no responde, reintenta (3 veces) */
+    async _marcarPresencia(intento = 1) {
+      const ch = this.ch;
+      let r;
+      try { r = await ch.track(this.meta); } catch { r = "error"; }
+      if (r === "ok" || ch !== this.ch || !this.listo) return;
+      if (intento < 3) setTimeout(() => this._marcarPresencia(intento + 1), 3000 * intento);
+      else console.warn(`presencia en ${this.topic}: el servidor no respondió (${r})`);
     }
 
     async enviar(evento, payload = {}) {

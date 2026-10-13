@@ -71,6 +71,24 @@ const PLANTILLAS = {
         ],
       },
     ],
+    /* Si las actividades no caben en sus 16 filas, su tabla crece hacia
+       abajo y «Material utilizado o anotaciones» le cede filas: se queda
+       con las que necesite su contenido (mínimo 3). Se tapa la zona de
+       abajo y se vuelve a trazar corrida (medidas tomadas de la plantilla:
+       líneas de 0.48 pt, filas de 12 pt). */
+    elastica: {
+      page: 0, paso: 12, grosor: 0.48, x0: 81.384, x1: 513.7,
+      arriba: "actividades", filasArriba: 16, fondoArriba: 458.47, colsArriba: [148.7],
+      abajoItems: ["materiales"], abajoWrap: ["anotaciones"], filasAbajo: 18, minAbajo: 3,
+      topeAbajo: 430.37, fondoAbajo: 202.34, colsAbajo: [148.7, 331.3],
+      zona: [80.9, 201.8, 434, 256.6],
+      titulo: { t: "MATERIAL UTILIZADO  O ANOTACIONES", x: 85.1, y: 433.5, size: 12 },
+      encabezado: [
+        { t: "CANTIDAD", x0: 85.1, y: 421, size: 9.96, serif: true },
+        { t: "MATERIAL UTILIZADO", x0: 148.9, x1: 331.3, y: 421.8, size: 8.5 },
+        { t: "ANOTACIONES", x0: 331.3, x1: 513.8, y: 421.8, size: 8.5 },
+      ],
+    },
     sigs: [
       { key: "firma_funcionario", page: 0, cx: 160, y: 149, h: 26, maxW: 130 },
       { key: "firma_trabajador", page: 0, cx: 410, y: 149, h: 26, maxW: 130 },

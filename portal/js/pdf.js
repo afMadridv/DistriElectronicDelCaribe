@@ -126,6 +126,13 @@ function partir(val) {
     .filter((s) => s !== "");
 }
 
+/* filas escritas de una tabla de ítems; sin ninguna, la tabla dice algo
+   («Ninguno») en vez de quedar en blanco */
+function filasItems(it, data) {
+  const rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim());
+  return !rows.length && it.vacio ? [{ cant: "", descripcion: it.vacio }] : rows;
+}
+
 function wrapText(font, text, size, maxW) {
   const words = String(text ?? "").replace(/\r/g, "").split(/\s+|\n/);
   const paras = String(text ?? "").replace(/\r/g, "").split("\n");
@@ -350,6 +357,17 @@ async function build(formatKey, record, opts = {}) {
     }
   }
 
+  /* rótulo en negro: serif imita la letra de la plantilla (Times negrita);
+     con x1 va centrado en [x0, x1], sin x1 alineado a la izquierda */
+  let timesBold = null;
+  const rotulo = async (pg, r) => {
+    const s = r.size || 8;
+    const f = r.serif ? (timesBold ||= await doc.embedFont(StandardFonts.TimesRomanBold)) : bold;
+    const w = f.widthOfTextAtSize(r.t, s);
+    const x = r.x1 != null ? r.x0 + (r.x1 - r.x0 - w) / 2 : r.x0;
+    pg.drawText(r.t, { x, y: r.y, size: s, font: f, color: rgb(0, 0, 0) });
+  };
+
   /* retoques fijos sobre la plantilla (p. ej. partir una columna en dos):
      tapa en blanco, líneas y rótulos en negro, como si fueran del formato */
   for (const pa of cfg.parches || []) {
@@ -358,13 +376,50 @@ async function build(formatKey, record, opts = {}) {
     for (const [x1, y1, x2, y2, g] of pa.lineas || []) {
       pg.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: g || 0.8, color: rgb(0, 0, 0) });
     }
-    for (const r of pa.rotulos || []) {
-      const s = r.size || 8;
-      // serif: imita la letra de la plantilla; sin x1 el rótulo va alineado a la izquierda
-      const f = r.serif ? await doc.embedFont(StandardFonts.TimesRomanBold) : bold;
-      const w = f.widthOfTextAtSize(r.t, s);
-      const x = r.x1 != null ? r.x0 + (r.x1 - r.x0 - w) / 2 : r.x0;
-      pg.drawText(r.t, { x, y: r.y, size: s, font: f, color: rgb(0, 0, 0) });
+    for (const r of pa.rotulos || []) await rotulo(pg, r);
+  }
+
+  /* ---------- tabla que crece (cfg.elastica) ----------
+     Las filas que necesita cada tabla se cuentan con el mismo corte de
+     líneas con que se escriben. `ajuste` cambia, solo para este PDF, la
+     primera fila (dy) y el tope de filas (max) de cada dato. */
+  const ajuste = {};
+  const el = cfg.elastica;
+  if (el) {
+    const lineasItems = (key) => {
+      const it = (cfg.items || []).find((i) => i.key === key);
+      return it ? filasItems(it, data).reduce((n, r) => n + wrapText(font, r.descripcion, it.size || 8, it.descMaxW).length, 0) : 0;
+    };
+    const lineasWrap = (key) => {
+      const w = (cfg.wrap || []).find((x) => x.key === key);
+      return w && data[key] ? wrapText(font, data[key], w.size || 8, w.maxW).length : 0;
+    };
+    const faltan = lineasItems(el.arriba) - el.filasArriba;
+    const necesitaAbajo = Math.max(el.minAbajo, ...el.abajoItems.map(lineasItems), ...el.abajoWrap.map(lineasWrap));
+    const extra = faltan > 0 ? Math.max(0, Math.min(faltan, el.filasAbajo - necesitaAbajo)) : 0;
+    if (extra) {
+      const d = extra * el.paso, g = el.grosor, negro = rgb(0, 0, 0);
+      const pg = P(el.page);
+      ajuste[el.arriba] = { max: el.filasArriba + extra };
+      for (const k of [...el.abajoItems, ...el.abajoWrap]) ajuste[k] = { dy: -d, max: el.filasAbajo - extra };
+
+      const [zx, zy, zw, zh] = el.zona;
+      pg.drawRectangle({ x: zx, y: zy, width: zw, height: zh, color: rgb(1, 1, 1) });
+      const linea = (y) => pg.drawRectangle({ x: el.x0, y, width: el.x1 + g - el.x0, height: g, color: negro });
+      const vertical = (x, abajo, arriba) => pg.drawRectangle({ x, y: abajo, width: g, height: arriba - abajo, color: negro });
+
+      // filas nuevas de la tabla de arriba
+      for (let k = 1; k <= extra; k++) linea(el.fondoArriba - k * el.paso);
+      for (const x of [el.x0, ...el.colsArriba, el.x1]) vertical(x, el.fondoArriba - d, el.fondoArriba + g);
+
+      // título y tabla de abajo, corridos hacia abajo; su fondo no se mueve
+      const t = el.titulo;
+      await rotulo(pg, { t: t.t, x0: t.x, y: t.y - d, size: t.size, serif: true });
+      const tope = el.topeAbajo - d;
+      const filas = Math.round((tope - el.fondoAbajo) / el.paso);
+      for (let k = 0; k <= filas; k++) linea(tope - k * el.paso);
+      for (const x of [el.x0, ...el.colsAbajo, el.x1]) vertical(x, el.fondoAbajo, tope + g);
+      for (const r of el.encabezado) await rotulo(pg, { ...r, y: r.y - d });
     }
   }
 
@@ -412,9 +467,11 @@ async function build(formatKey, record, opts = {}) {
   };
 
   /* texto multilínea */
-  for (const w of cfg.wrap || []) {
-    const val = data[w.key];
+  for (const w0 of cfg.wrap || []) {
+    const val = data[w0.key];
     if (!val) continue;
+    const aj = ajuste[w0.key] || {};
+    const w = { ...w0, y0: w0.y0 + (aj.dy || 0), maxLines: aj.max ?? w0.maxLines };
     const todas = wrapText(font, val, w.size || 8, w.maxW);
     const max = w.maxLines || 8;
     todas.slice(0, max).forEach((line, i) => {
@@ -430,10 +487,10 @@ async function build(formatKey, record, opts = {}) {
      con la letra del mismo tamaño, en vez de encogerse hasta caber en una:
      el número del ítem se escribe solo en la primera fila, así una misma
      idea no gasta varios números. */
-  for (const it of cfg.items || []) {
-    let rows = (data[it.key] || []).filter((r) => (r.descripcion || "").trim());
-    // sin filas escritas, la tabla dice algo («Ninguno») en vez de quedar en blanco
-    if (!rows.length && it.vacio) rows = [{ cant: "", descripcion: it.vacio }];
+  for (const it0 of cfg.items || []) {
+    const aj = ajuste[it0.key] || {};
+    const it = { ...it0, y0: it0.y0 + (aj.dy || 0), max: aj.max ?? it0.max };
+    const rows = filasItems(it, data);
     const size = it.size || 8;
     const sigue = [];
     let fila = 0;
