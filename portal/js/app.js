@@ -293,7 +293,7 @@
      ============================================================ */
   const PLAN = Object.assign({ ARCHIVOS_MB: 1024, BASE_DATOS_MB: 500 }, (window.APP_CONFIG || {}).PLAN || {});
   const MB = 1048576;
-  let relojAlmacenamiento = null;
+  let relojAlmacenamiento = 0;   // cuándo se leyó el uso por última vez
 
   function tamano(bytes) {
     const mb = bytes / MB;
@@ -335,15 +335,16 @@
     }
   }
 
+  /* Sin consultas periódicas: el uso se lee al entrar, después de guardar,
+     borrar o importar, y al volver al portal si pasaron 5 min o más. */
   function vigilarAlmacenamiento() {
-    clearInterval(relojAlmacenamiento);
+    relojAlmacenamiento = Date.now();
     actualizarAlmacenamiento();
-    relojAlmacenamiento = setInterval(() => {
-      if (document.visibilityState === "visible") actualizarAlmacenamiento();
-    }, 60000);
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && Store.getProfile()) actualizarAlmacenamiento();
+    if (document.visibilityState !== "visible" || !Store.getProfile()) return;
+    if (Date.now() - (relojAlmacenamiento || 0) < 5 * 60000) return;
+    vigilarAlmacenamiento();
   });
   $("#storage-refresh").addEventListener("click", actualizarAlmacenamiento);
 

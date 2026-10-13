@@ -13,7 +13,7 @@
    ============================================================ */
 (function () {
   const COLORES = ["#2563eb", "#16a34a", "#db2777", "#7c3aed", "#ea580c", "#0891b2", "#b45309"];
-  const ESPERA_ENVIO = 120;   // ms entre un cambio y su envío (agrupa lo que se teclea)
+  const ESPERA_ENVIO = 350;   // ms sin teclear antes de enviar (agrupa lo que se escribe)
 
   let canal = null;
   let ctx = null;
@@ -21,6 +21,7 @@
   let anteriores = new Map();        // clave → miembro (para saber quién entra y sale)
   const relojes = new Map();         // campo → temporizador de envío
   const ultimoLocal = new Map();     // campo → instante de la última tecla propia
+  const enviados = new Map();        // campo → último valor enviado (no se repite)
   let miFoco = null;
 
   const $ = (s, r = document) => r.querySelector(s);
@@ -130,6 +131,8 @@
           const enMiFoco = miFoco === campo && Date.now() - (ultimoLocal.get(campo) || 0) < 1500;
           if (enMiFoco) return;
           ctx.aplicar(campo, valor);
+          // lo que llegó pasa a ser lo «último enviado»: si vuelvo al valor anterior, sí viaja
+          enviados.set(campo, JSON.stringify(valor ?? null));
           const quien = canal.miembros().find((m) => m.clave === de);
           if (quien) destello(campo, quien);
         })
@@ -176,6 +179,7 @@
     salir() {
       for (const t of relojes.values()) clearTimeout(t);
       relojes.clear();
+      enviados.clear();
       ultimoLocal.clear();
       if (canal) canal.salir();
       canal = null;
@@ -198,7 +202,13 @@
       clearTimeout(relojes.get(campo));
       relojes.set(campo, setTimeout(() => {
         relojes.delete(campo);
-        if (canal) canal.enviar("campo", { de: Tiempo.idPestana, campo, valor: ctx.valor(campo) });
+        if (!canal || !ctx) return;
+        // solo viaja si de verdad cambió desde el último envío
+        const valor = ctx.valor(campo);
+        const huella = JSON.stringify(valor ?? null);
+        if (enviados.get(campo) === huella) return;
+        enviados.set(campo, huella);
+        canal.enviar("campo", { de: Tiempo.idPestana, campo, valor });
       }, ESPERA_ENVIO));
     },
 
