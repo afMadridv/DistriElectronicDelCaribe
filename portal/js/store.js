@@ -227,7 +227,7 @@
         const { data, error } = await sb
           .from("cotizaciones")
           // no_doc: el No. OTT que se escribe a mano en el UPS (se muestra en el historial)
-          .select("id, numero, format_type, user_id, owner_name, created_at, updated_at, updated_by_name, cliente:data->>cliente, no_doc:data->>no_ott")
+          .select("id, numero, nombre, format_type, user_id, owner_name, created_at, updated_at, updated_by_name, cliente:data->>cliente, no_doc:data->>no_ott")
           .order("updated_at", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
@@ -244,25 +244,48 @@
       return data;
     },
 
-    async createCotizacion({ numero, format_type, data }) {
+    async createCotizacion({ numero, format_type, data, nombre = null }) {
       const now = new Date().toISOString();
       if (this.isDemo) {
         const cot = {
-          id: uid(), numero, format_type, data,
+          id: uid(), numero, nombre, format_type, data,
           user_id: currentProfile.id, owner_name: currentProfile.name,
           created_at: now, updated_at: now, updated_by_name: currentProfile.name,
         };
         const all = lsGet(DEMO_KEYS.cots, []);
+        // igual que el índice único de la base: el número no se repite
+        if (all.some((c) => c.numero === numero)) throw Object.assign(new Error("Número repetido."), { code: "23505" });
         all.push(cot);
         lsSet(DEMO_KEYS.cots, all);
         return cot;
       }
       const { data: row, error } = await sb
         .from("cotizaciones")
-        .insert({ numero, format_type, data, user_id: currentProfile.id, owner_name: currentProfile.name })
+        .insert({ numero, nombre, format_type, data, user_id: currentProfile.id, owner_name: currentProfile.name })
         .select().single();
       if (error) throw error;
       return row;
+    },
+
+    /* Nombre del archivo y fechas de un formato ya terminado. Fecha en
+       null = no se cambia (solo un Jefe o el Administrador las cambian). */
+    async editarDetalles(id, { nombre, creado = null, modificado = null }) {
+      if (this.isDemo) {
+        const all = lsGet(DEMO_KEYS.cots, []);
+        const c = all.find((x) => x.id === id);
+        if (!c) throw new Error("Formato no encontrado.");
+        if ((creado || modificado) && !esGestor(currentProfile)) throw new Error("Solo un Jefe o el Administrador cambian las fechas");
+        c.nombre = String(nombre || "").trim().slice(0, 120) || null;
+        if (creado) c.created_at = creado;
+        if (modificado) c.updated_at = modificado;
+        lsSet(DEMO_KEYS.cots, all);
+        return c;
+      }
+      const { data, error } = await sb.rpc("editar_detalles", {
+        p_id: id, p_nombre: nombre || "", p_creado: creado, p_modificado: modificado,
+      });
+      if (error) throw new Error(error.message);
+      return data;
     },
 
     async updateCotizacion(id, data) {

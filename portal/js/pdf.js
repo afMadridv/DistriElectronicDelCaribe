@@ -189,6 +189,73 @@ function numeroImpreso(formatKey, record) {
   return record.numero || "";
 }
 
+/* ---------- DATOS PARA VOLVER A IMPORTAR ----------
+   Cada PDF que se descarga lleva adentro, como archivo adjunto, los datos
+   del formulario con sus fotos y firmas. Si el registro se borra del
+   portal, ese PDF sirve de copia: se importa y se sigue editando. */
+const ADJUNTO = "datos-portal.json";
+const PORTAL = "DistriElectronicDelCaribe";
+
+/* foto firmada (URL) → dataURL, para que la copia no dependa del almacenamiento */
+async function aDataURL(src) {
+  if (typeof src !== "string" || !/^(https?:|blob:)/.test(src)) return src;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    return await new Promise((ok, mal) => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => mal(r.error);
+      r.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn("La foto no quedó dentro de la copia del PDF:", e.message);
+    return src;
+  }
+}
+
+/* Mismo criterio que Store.hydrateImages: listas de fotos (ruta o {src, desc}) */
+async function datosPortables(formatKey, record) {
+  const data = { ...(record.data || {}) };
+  const esFoto = (v) => typeof v === "string" || (v && typeof v === "object" && typeof v.src === "string");
+  for (const [k, arr] of Object.entries(data)) {
+    if (!Array.isArray(arr) || !arr.length || !arr.every(esFoto)) continue;
+    data[k] = await Promise.all(arr.map(async (v) =>
+      typeof v === "string" ? aDataURL(v) : { ...v, src: await aDataURL(v.src) }));
+  }
+  return {
+    portal: PORTAL, version: 1, format_type: formatKey,
+    numero: record.numero || "", nombre: record.nombre || "", exportado: new Date().toISOString(), data,
+  };
+}
+
+/* Lee los datos adjuntos de un PDF descargado del portal (null si no trae) */
+async function leerDatos(bytes) {
+  const { PDFName, PDFDict, PDFArray, decodePDFRawStream } = PDFLib;
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false, throwOnInvalidObject: false });
+  const names = doc.catalog.lookupMaybe(PDFName.of("Names"), PDFDict);
+  const raiz = names && names.lookupMaybe(PDFName.of("EmbeddedFiles"), PDFDict);
+  if (!raiz) return null;
+  // árbol de nombres: pares [nombre, especificación] directos o en Kids
+  const pares = [];
+  const recorrer = (nodo) => {
+    const arr = nodo.lookupMaybe(PDFName.of("Names"), PDFArray);
+    if (arr) for (let i = 0; i + 1 < arr.size(); i += 2) pares.push([arr.lookup(i), arr.lookup(i + 1)]);
+    const kids = nodo.lookupMaybe(PDFName.of("Kids"), PDFArray);
+    if (kids) for (let i = 0; i < kids.size(); i++) recorrer(kids.lookup(i, PDFDict));
+  };
+  recorrer(raiz);
+  for (const [nombre, spec] of pares) {
+    if (!nombre || typeof nombre.decodeText !== "function" || nombre.decodeText() !== ADJUNTO) continue;
+    const ef = spec.lookup(PDFName.of("EF"), PDFDict);
+    const bruto = decodePDFRawStream(ef.lookup(PDFName.of("F"))).decode();
+    const datos = JSON.parse(new TextDecoder().decode(bruto));
+    return datos && datos.portal === PORTAL ? datos : null;
+  }
+  return null;
+}
+
 async function build(formatKey, record, opts = {}) {
   const cfg = PLANTILLAS[formatKey];
   if (!cfg) throw new Error("Formato sin plantilla: " + formatKey);
@@ -676,27 +743,41 @@ async function build(formatKey, record, opts = {}) {
     }
   }
 
+  if (opts.adjunto) {
+    await doc.attach(new TextEncoder().encode(JSON.stringify(opts.adjunto)), ADJUNTO, {
+      mimeType: "application/json",
+      description: "Datos del formato para importarlo al portal",
+      creationDate: new Date(), modificationDate: new Date(),
+    });
+  }
+
   return doc;
+}
+
+/* El nombre lo puede elegir quien descarga; se limpian los caracteres
+   que Windows no admite en un nombre de archivo. */
+function nombreArchivo(formatKey, record, elegido) {
+  const name = (PLANTILLAS[formatKey].file || "documento.pdf").replace(/\.pdf$/i, "");
+  const propuesto = `${name} - ${numeroImpreso(formatKey, record) || record.numero || ""}`;
+  const limpio = String(elegido || record.nombre || propuesto).trim().replace(/[\\/:*?"<>|]/g, "-").replace(/\.pdf$/i, "");
+  return (limpio || propuesto) + ".pdf";
 }
 
 const PDFGen = {
   build,
   numeroImpreso,
-  async download(formatKey, record, nombreArchivo) {
-    const doc = await build(formatKey, record);
-    const bytes = await doc.save();
+  leerDatos,
+  /* PDF con sus datos adjuntos (record con las fotos ya firmadas) */
+  async archivo(formatKey, record, elegido) {
+    const doc = await build(formatKey, record, { adjunto: await datosPortables(formatKey, record) });
+    return { bytes: await doc.save(), nombre: nombreArchivo(formatKey, record, elegido) };
+  },
+  async download(formatKey, record, elegido) {
+    const { bytes, nombre } = await this.archivo(formatKey, record, elegido);
     const blob = new Blob([bytes], { type: "application/pdf" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    const name = (PLANTILLAS[formatKey].file || "documento.pdf").replace(/\.pdf$/i, "");
-    const propuesto = `${name} - ${numeroImpreso(formatKey, record) || record.numero || ""}`;
-    /* El nombre lo puede elegir quien descarga; se limpian los caracteres
-       que Windows no admite en un nombre de archivo. */
-    const elegido = String(nombreArchivo || propuesto)
-      .trim()
-      .replace(/[\\/:*?"<>|]/g, "-")
-      .replace(/\.pdf$/i, "");
-    a.download = (elegido || propuesto) + ".pdf";
+    a.download = nombre;
     a.click();
     /* el enlace sigue vivo 10 min: el aviso «PDF listo» lo usa para
        abrir el archivo con un toque */

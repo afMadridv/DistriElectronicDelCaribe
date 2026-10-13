@@ -209,6 +209,11 @@
         </header>
         <div class="toolbar">
           <input type="search" id="search-historial" class="search-input" placeholder="Buscar por cliente, formato o número…" />
+          <div class="toolbar-actions">
+            <button type="button" class="btn btn-ghost" id="hist-importar" title="Volver a cargar formatos desde PDF descargados del portal o desde el ZIP">Importar</button>
+            <button type="button" class="btn btn-primary" id="hist-descargar-todos" title="Un ZIP con el PDF de cada formato listado">Descargar todos</button>
+            <input type="file" id="hist-importar-archivo" class="hidden" multiple accept=".pdf,.zip,application/pdf,application/zip,application/x-zip-compressed" />
+          </div>
         </div>
         <div id="historial-list" class="historial-list"></div>
       </section>
@@ -296,6 +301,32 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
           <button type="submit" class="btn btn-primary">Descargar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== MODAL NOMBRE Y FECHAS DE UN FORMATO ===== -->
+  <div id="detalles-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h3>Nombre y fechas</h3>
+      <p class="confirm-text" id="det-sub"></p>
+      <form id="detalles-form">
+        <label class="field">
+          <span>Nombre del archivo</span>
+          <input type="text" id="det-nombre" maxlength="120" autocomplete="off" />
+          <small class="field-hint">Sale como título en el historial y como nombre del PDF. Vacío = el nombre de siempre.</small>
+        </label>
+        <div class="form-row">
+          <label class="field"><span>Creado</span><input type="datetime-local" id="det-creado" /></label>
+          <label class="field"><span>Última modificación</span><input type="datetime-local" id="det-modificado" /></label>
+        </div>
+        <small class="field-hint" id="det-fechas-hint"></small>
+        <p id="det-error" class="form-error hidden"></p>
+        <div class="modal-actions modal-actions-stack">
+          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="button" class="btn btn-ghost" id="det-contenido">Editar contenido (datos, fecha del formato, firmas)</button>
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
         </div>
       </form>
     </div>

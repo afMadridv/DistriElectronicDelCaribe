@@ -13,6 +13,8 @@
   let signatures = {};        // { fieldKey: pad de firma (ver crearPadFirma) }
   let previewTimer = null;
   let formDirty = false;      // cambios sin guardar en el formulario
+  let numeroImportado = null; // número original del formato importado (si se abrió uno)
+  let nombreImportado = null; // y su nombre de archivo
 
   /* ---------- helpers UI ---------- */
   function toast(msg, type = "ok") {
@@ -552,9 +554,13 @@
   /* ============================================================
      GENERAR — formulario dinámico
      ============================================================ */
-  function openForm(formatKey, record) {
+  /* importado: { numero, data } de un PDF de respaldo; se abre como formato
+     nuevo ya lleno y, al guardarlo, recupera su número si está libre */
+  function openForm(formatKey, record, importado = null) {
     currentFormat = formatKey;
     editingRecord = record;
+    numeroImportado = importado ? importado.numero || null : null;
+    nombreImportado = importado ? importado.nombre || null : null;
     formImages = {};
     signatures = {};
     itemsCtl = {};
@@ -563,11 +569,12 @@
     firmasTocadas = new Set();
     aviseEdicion = false;
     const format = FORMATS[formatKey];
-    const data = record ? record.data : {};
+    const data = record ? record.data : importado ? importado.data || {} : {};
 
     $("#format-picker").classList.add("hidden");
     $("#form-wrap").classList.remove("hidden");
-    $("#current-format-name").textContent = (record ? `Editando ${record.numero} — ` : "") + format.name;
+    $("#current-format-name").textContent = (record ? `Editando ${record.numero} — `
+      : importado ? `Importado${numeroImportado ? " " + numeroImportado : ""} — ` : "") + format.name;
     $("#generate-btn-label").textContent = record ? "Guardar cambios y descargar PDF" : "Generar PDF";
     $("#save-status").textContent = "";
 
@@ -678,7 +685,8 @@
     }
 
     // la fecha la escribe quien llena el formato (es obligatoria): no se pone sola
-    formDirty = false;
+    // lo importado aún no está guardado: salir sin guardar pide confirmación
+    formDirty = !!importado;
 
     /* auditoría (solo trabajadores) y edición en conjunto (formatos guardados) */
     NotificationService.registrar("formato_abierto", {
@@ -1178,7 +1186,8 @@
   /* Antes de descargar se puede cambiar el nombre del PDF (ventana propia:
      window.prompt no siempre aparece en la app instalada). null = canceló */
   function pedirNombre(formatKey, record) {
-    const base = `${FORMATS[formatKey].name} - ${PDFGen.numeroImpreso(formatKey, record) || record.numero || ""}`.trim();
+    const base = record.nombre
+      || `${FORMATS[formatKey].name} - ${PDFGen.numeroImpreso(formatKey, record) || record.numero || ""}`.trim();
     return new Promise((resolve) => {
       const modal = $("#nombre-modal"), input = $("#nombre-pdf"), form = $("#nombre-form");
       const cerrar = modal.querySelector("[data-close-modal]");
@@ -1245,8 +1254,8 @@
         // quienes editan el mismo formato refrescan fotos y número
         Colaboracion.guardado(record);
       } else {
-        const numero = await Store.nextNumber(format.prefix);
-        record = await Store.createCotizacion({ numero, format_type: currentFormat, data });
+        record = await crearRegistro(currentFormat, data, numeroImportado, nombreImportado);
+        numeroImportado = nombreImportado = null;
         editingRecord = record;
         $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
         $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
@@ -1312,6 +1321,196 @@
     }
   }
 
+  /* Crea el registro. Un formato importado recupera su número original si
+     nadie lo tiene (p. ej. se había borrado); si ya existe, recibe uno nuevo. */
+  async function crearRegistro(formatKey, data, numeroOriginal, nombre = null) {
+    if (numeroOriginal) {
+      try {
+        return await Store.createCotizacion({ numero: numeroOriginal, format_type: formatKey, data, nombre });
+      } catch (e) {
+        if (!(e && e.code === "23505")) throw e;   // 23505 = número repetido
+      }
+    }
+    for (let intento = 1; ; intento++) {
+      const numero = await Store.nextNumber(FORMATS[formatKey].prefix);
+      try {
+        return await Store.createCotizacion({ numero, format_type: formatKey, data, nombre });
+      } catch (e) {
+        if (!(e && e.code === "23505") || intento >= 5) throw e;
+      }
+    }
+  }
+
+  /* ============================================================
+     RESPALDO: descargar todos e importar
+     Los PDF del portal llevan adentro sus datos (fotos y firmas
+     incluidas). «Descargar todos» arma un ZIP con esos PDF; «Importar»
+     recibe uno o varios PDF, o el ZIP, y los vuelve formatos editables.
+     ============================================================ */
+  let cargaZip = null;
+  function cargarZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (!cargaZip) {
+      cargaZip = new Promise((ok, mal) => {
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+        s.onload = () => ok(window.JSZip);
+        s.onerror = () => { cargaZip = null; mal(new Error("no se pudo cargar el compresor ZIP. Revisa tu conexión.")); };
+        document.head.appendChild(s);
+      });
+    }
+    return cargaZip;
+  }
+
+  function descargarBlob(blob, nombre) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  }
+
+  async function descargarTodos() {
+    const btn = $("#hist-descargar-todos");
+    const lista = filasHistorial();
+    if (!lista.length) { toast("No hay formatos para descargar.", "error"); return; }
+    const ok = await showConfirm("Descargar todos",
+      `Se descargará un ZIP con ${lista.length} PDF${lista.length === 1 ? "" : "s"}${$("#search-historial").value.trim() ? " (los que muestra la búsqueda)" : ""}. ` +
+      "Cada PDF sirve de respaldo: se puede volver a importar y editar.", "Descargar");
+    if (!ok) return;
+    btn.disabled = true;
+    const etiqueta = btn.textContent;
+    const fallos = [];
+    try {
+      const zip = new (await cargarZip())();
+      const usados = new Set();
+      for (let i = 0; i < lista.length; i++) {
+        btn.textContent = `Generando ${i + 1} de ${lista.length}…`;
+        const c = lista[i];
+        try {
+          const rec = await Store.getCotizacion(c.id);
+          if (!rec || !FORMATS[rec.format_type]) throw new Error("formato desconocido");
+          const { bytes, nombre } = await PDFGen.archivo(rec.format_type, await Store.hydrateImages(rec));
+          let n = nombre;
+          for (let k = 2; usados.has(n.toLowerCase()); k++) n = nombre.replace(/\.pdf$/i, ` (${k}).pdf`);
+          usados.add(n.toLowerCase());
+          zip.file(n, bytes);
+        } catch (e) {
+          console.warn("descargar todos:", c.numero, e);
+          fallos.push(c.numero);
+        }
+      }
+      btn.textContent = "Comprimiendo…";
+      const blob = await zip.generateAsync({ type: "blob" });
+      descargarBlob(blob, `Formatos DistriElectronic ${new Date().toLocaleDateString("en-CA")}.zip`);
+      toast(fallos.length
+        ? `ZIP listo. No se pudieron incluir: ${fallos.join(", ")}.`
+        : `ZIP listo con ${lista.length} formato${lista.length === 1 ? "" : "s"}.`, fallos.length ? "error" : undefined);
+    } catch (e) {
+      toast(`No se pudo armar el ZIP: ${mensajeError(e)}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = etiqueta;
+    }
+  }
+
+  /* Lee los datos de cada PDF (sueltos o dentro de un ZIP) */
+  async function leerRespaldos(files) {
+    const datos = [], fallos = [];
+    const leer = async (bytes, nombre) => {
+      try {
+        const d = await PDFGen.leerDatos(bytes);
+        if (d && FORMATS[d.format_type] && d.data) datos.push({ ...d, archivo: nombre });
+        else fallos.push(nombre);
+      } catch (e) {
+        console.warn("importar:", nombre, e);
+        fallos.push(nombre);
+      }
+    };
+    for (const file of files) {
+      if (/\.zip$/i.test(file.name) || /zip/.test(file.type)) {
+        const zip = await (await cargarZip()).loadAsync(file);
+        for (const entrada of Object.values(zip.files)) {
+          if (entrada.dir || !/\.pdf$/i.test(entrada.name)) continue;
+          await leer(await entrada.async("uint8array"), entrada.name.split("/").pop());
+        }
+      } else {
+        await leer(new Uint8Array(await file.arrayBuffer()), file.name);
+      }
+    }
+    return { datos, fallos };
+  }
+
+  /* Varios a la vez: se guardan directo (fotos al almacenamiento) */
+  async function guardarImportado(d) {
+    const data = { ...d.data };
+    for (const [k, arr] of Object.entries(data)) {
+      if (!Array.isArray(arr)) continue;
+      if (!arr.some((v) => v && typeof v === "object" && String(v.src || "").startsWith("data:"))) continue;
+      const fotos = [];
+      for (const v of arr) {
+        const src = String(v && v.src || "");
+        fotos.push(src.startsWith("data:") ? { ...v, src: await subirFoto(src) } : v);
+      }
+      data[k] = fotos;
+    }
+    return crearRegistro(d.format_type, data, d.numero, d.nombre || null);
+  }
+
+  async function importarArchivos(files) {
+    if (!files.length) return;
+    const btn = $("#hist-importar");
+    const etiqueta = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Leyendo…";
+    try {
+      const { datos, fallos } = await leerRespaldos(files);
+      const aviso = fallos.length
+        ? ` No traen datos del portal (solo sirven los PDF descargados desde ahora): ${fallos.slice(0, 5).join(", ")}${fallos.length > 5 ? "…" : ""}.` : "";
+      if (!datos.length) { toast(`No se encontró ningún formato para importar.${aviso}`, "error"); return; }
+
+      // uno solo: se abre en el formulario para revisarlo y editarlo antes de guardar
+      if (datos.length === 1) {
+        const d = datos[0];
+        btn.disabled = false;
+        btn.textContent = etiqueta;
+        guardExit(() => {
+          openForm(d.format_type, null, d);
+          toast(`Formato importado${d.numero ? " (" + d.numero + ")" : ""}. Revísalo y guárdalo para que quede en el historial.${aviso}`, fallos.length ? "error" : undefined);
+        });
+        return;
+      }
+
+      const ok = await showConfirm("Importar formatos",
+        `Se agregarán ${datos.length} formatos al historial. Los que ya existan con el mismo número quedan con un número nuevo.${aviso}`, "Importar");
+      if (!ok) return;
+      const malos = [];
+      for (let i = 0; i < datos.length; i++) {
+        btn.textContent = `Importando ${i + 1} de ${datos.length}…`;
+        try { await guardarImportado(datos[i]); }
+        catch (e) { console.warn("importar:", datos[i].archivo, e); malos.push(datos[i].archivo); }
+      }
+      toast(malos.length
+        ? `Importados ${datos.length - malos.length} de ${datos.length}. Fallaron: ${malos.join(", ")}.`
+        : `${datos.length} formatos importados.`, malos.length ? "error" : undefined);
+      renderHistorial();
+      actualizarAlmacenamiento();
+    } catch (e) {
+      toast(`No se pudo importar: ${mensajeError(e)}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = etiqueta;
+    }
+  }
+
+  $("#hist-descargar-todos").addEventListener("click", descargarTodos);
+  $("#hist-importar").addEventListener("click", () => $("#hist-importar-archivo").click());
+  $("#hist-importar-archivo").addEventListener("change", (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";   // permite volver a elegir el mismo archivo
+    importarArchivos(files);
+  });
+
   /* ============================================================
      HISTORIAL
      ============================================================ */
@@ -1329,16 +1528,92 @@
     drawHistorial();
   }
 
+  /* ----- nombre y fechas de un formato ya terminado ----- */
+  // Date → valor de <input type="datetime-local"> en la hora local
+  const aLocal = (iso) => {
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  function abrirDetalles(c) {
+    if (!c) return;
+    const gestor = esGestor(Store.getProfile());
+    const modal = $("#detalles-modal");
+    const fmt = FORMATS[c.format_type] || { name: c.format_type };
+    $("#det-sub").textContent = `${fmt.name} · ${c.no_doc ? "No. OTT " + c.no_doc : c.numero}${c.cliente ? " · " + c.cliente : ""}`;
+    $("#det-nombre").value = c.nombre || "";
+    $("#det-nombre").placeholder = `${fmt.name} - ${c.no_doc || c.numero}`;
+    const ahora = aLocal(new Date().toISOString());
+    for (const [sel, iso] of [["#det-creado", c.created_at], ["#det-modificado", c.updated_at]]) {
+      const el = $(sel);
+      el.value = aLocal(iso);
+      el.max = ahora;
+      el.disabled = !gestor;
+    }
+    $("#det-fechas-hint").textContent = gestor
+      ? "La última modificación se vuelve a poner sola la próxima vez que alguien guarde cambios."
+      : "Las fechas solo las cambia un Jefe o el Administrador.";
+    $("#det-error").classList.add("hidden");
+    modal.classList.remove("hidden");
+
+    const form = $("#detalles-form");
+    const cerrar = () => {
+      modal.classList.add("hidden");
+      form.onsubmit = null;
+      modal.querySelector("[data-close-modal]").onclick = null;
+      $("#det-contenido").onclick = null;
+    };
+    modal.querySelector("[data-close-modal]").onclick = cerrar;
+    $("#det-contenido").onclick = async () => {
+      cerrar();
+      const rec = await Store.getCotizacion(c.id).catch(() => null);
+      if (rec && FORMATS[rec.format_type]) openForm(rec.format_type, rec);
+      else toast("Este registro usa un formato que ya no existe.", "error");
+    };
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const err = $("#det-error");
+      // solo se envían las fechas que se cambiaron (null = se dejan como están)
+      const cambio = (sel, iso) => {
+        const v = $(sel).value;
+        return gestor && v && v !== aLocal(iso) ? new Date(v).toISOString() : null;
+      };
+      const creado = cambio("#det-creado", c.created_at);
+      const modificado = cambio("#det-modificado", c.updated_at);
+      const fc = new Date(creado || c.created_at), fm = new Date(modificado || c.updated_at);
+      const fallo = fm < fc ? "La última modificación no puede ser anterior a la creación."
+        : (fc > new Date() || fm > new Date()) ? "Las fechas no pueden quedar en el futuro." : "";
+      if (fallo) { err.textContent = fallo; err.classList.remove("hidden"); return; }
+      const btn = form.querySelector('[type="submit"]');
+      btn.disabled = true;
+      try {
+        await Store.editarDetalles(c.id, { nombre: $("#det-nombre").value, creado, modificado });
+        cerrar();
+        toast("Detalles guardados.");
+        renderHistorial();
+      } catch (ex) {
+        err.textContent = mensajeError(ex);
+        err.classList.remove("hidden");
+      } finally { btn.disabled = false; }
+    };
+  }
+
+  /* lo que muestra el historial con la búsqueda actual */
+  function filasHistorial() {
+    const q = $("#search-historial").value.trim().toLowerCase();
+    return historialCache.filter((c) => {
+      if (!q) return true;
+      const fmt = FORMATS[c.format_type];
+      return [c.numero, c.nombre, c.no_doc, c.cliente, fmt?.name, c.owner_name, c.updated_by_name]
+        .some((s) => (s || "").toLowerCase().includes(q));
+    });
+  }
+
   function drawHistorial() {
     const q = $("#search-historial").value.trim().toLowerCase();
     const list = $("#historial-list");
     const isJefe = esGestor(Store.getProfile());
-    const rows = historialCache.filter((c) => {
-      if (!q) return true;
-      const fmt = FORMATS[c.format_type];
-      return [c.numero, c.no_doc, c.cliente, fmt?.name, c.owner_name]
-        .some((s) => (s || "").toLowerCase().includes(q));
-    });
+    const rows = filasHistorial();
 
     if (!rows.length) {
       list.innerHTML = `<div class="empty-state"><div class="es-icon">${window.ICONS.folder}</div>
@@ -1354,14 +1629,15 @@
       <div class="hist-card" data-id="${c.id}">
         <div class="hist-icon">${fmt.icon}</div>
         <div class="hist-info">
-          <strong>${escapeHtml(c.cliente || "Sin cliente")}</strong>
-          <small>${fmt.name} · Creado: ${fecha(c.created_at)}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
+          <strong>${escapeHtml(c.nombre || c.cliente || "Sin cliente")}</strong>
+          <small>${c.nombre && c.cliente ? escapeHtml(c.cliente) + " · " : ""}${fmt.name} · Creado: ${fecha(c.created_at)}${isJefe && c.owner_name ? " · " + escapeHtml(c.owner_name) : ""}</small>
           <small class="hist-mod">Última modificación: ${fecha(c.updated_at)}${quien ? " · " + escapeHtml(quien) : ""}</small>
         </div>
         <span class="hist-num" title="Consecutivo del sistema: ${escapeHtml(c.numero)}">${escapeHtml(c.no_doc ? `No. OTT ${c.no_doc}` : c.numero)}</span>
         <div class="hist-actions">
           <button class="btn btn-primary btn-sm" data-act="edit">Editar</button>
           <button class="btn btn-ghost btn-sm" data-act="pdf">PDF</button>
+          <button class="icon-btn" data-act="det" title="Nombre y fechas" aria-label="Nombre y fechas">${window.ICONS.edit}</button>
           <button class="icon-btn danger" data-act="del" title="Eliminar">${window.ICONS.trash}</button>
         </div>
       </div>`;
@@ -1369,6 +1645,8 @@
 
     list.querySelectorAll(".hist-card").forEach((card) => {
       const id = card.dataset.id;
+      card.querySelector('[data-act="det"]').addEventListener("click", () =>
+        abrirDetalles(historialCache.find((c) => c.id === id)));
       card.querySelector('[data-act="edit"]').addEventListener("click", async () => {
         const rec = await Store.getCotizacion(id);
         if (rec && FORMATS[rec.format_type]) openForm(rec.format_type, rec);

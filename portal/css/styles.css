@@ -39,8 +39,8 @@ html { overflow-x: hidden; }
 /* Safari pinta el texto de los botones con el azul del sistema */
 button { color: inherit; }
 /* Safari da a la fecha un ancho propio y se sale de su casilla */
-input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; }
-input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="date"], input[type="datetime-local"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; display: block; }
+input[type="date"]::-webkit-date-and-time-value, input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .hidden { display: none !important; }
 
 /* aviso cuando el portal se abre con doble clic (file://) */
@@ -271,6 +271,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .view-header p { color: var(--gray-500); margin-top: 3px; }
 .toolbar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
 .search-input { max-width: 380px; }
+.toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
+.toolbar-actions .btn { white-space: nowrap; }
 
 /* ---------- Format picker ---------- */
 .format-grid {
@@ -640,6 +642,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
   .hist-actions .btn { flex: 1; padding: 11px 8px; }
   .toolbar { flex-wrap: wrap; }
   .search-input { max-width: 100%; }
+  .toolbar-actions { width: 100%; margin-left: 0; }
+  .toolbar-actions .btn { flex: 1; }
 
   .users-list { grid-template-columns: 1fr; }
   /* los cuadros de diálogo salen desde abajo, como en las apps */

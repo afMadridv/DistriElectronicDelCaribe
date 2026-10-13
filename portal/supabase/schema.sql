@@ -173,6 +173,10 @@ security definer
 set search_path = public
 as $$
 begin
+  -- editar_detalles (abajo) corrige nombre y fechas a mano: se respeta
+  if tg_op = 'UPDATE' and current_setting('app.detalles', true) = '1' then
+    return new;
+  end if;
   new.updated_at := now();
   if auth.uid() is not null then
     new.updated_by := auth.uid();
@@ -186,6 +190,50 @@ drop trigger if exists cot_updated_at on public.cotizaciones;
 create trigger cot_updated_at
   before insert or update on public.cotizaciones
   for each row execute function public.tocar_updated_at();
+
+-- Nombre del archivo (título en el historial y nombre del PDF)
+alter table public.cotizaciones add column if not exists nombre text;
+
+-- Detalles de un formato ya terminado: nombre (dueño, Jefe o Administrador)
+-- y fechas de creación y última modificación (solo Jefe o Administrador).
+create or replace function public.editar_detalles(
+  p_id uuid, p_nombre text, p_creado timestamptz, p_modificado timestamptz)
+returns public.cotizaciones
+language plpgsql security definer set search_path = public
+as $$
+declare
+  r public.cotizaciones;
+  gestor boolean := public.is_jefe();
+begin
+  if auth.uid() is null then raise exception 'No autenticado'; end if;
+  select * into r from public.cotizaciones where id = p_id;
+  if not found or not (r.user_id = auth.uid() or gestor) then
+    raise exception 'No autorizado';
+  end if;
+  -- fecha en null = no se cambia
+  if not gestor and (p_creado is not null or p_modificado is not null) then
+    raise exception 'Solo un Jefe o el Administrador cambian las fechas';
+  end if;
+  if p_creado > now() or p_modificado > now() then
+    raise exception 'Las fechas no pueden quedar en el futuro';
+  end if;
+  if coalesce(p_modificado, r.updated_at) < coalesce(p_creado, r.created_at) then
+    raise exception 'La última modificación no puede ser anterior a la creación';
+  end if;
+  perform set_config('app.detalles', '1', true);
+  update public.cotizaciones set
+    nombre = nullif(left(trim(coalesce(p_nombre, '')), 120), ''),
+    created_at = coalesce(p_creado, created_at),
+    updated_at = coalesce(p_modificado, updated_at)
+  where id = p_id
+  returning * into r;
+  perform set_config('app.detalles', '', true);
+  return r;
+end;
+$$;
+
+revoke all on function public.editar_detalles(uuid, text, timestamptz, timestamptz) from public, anon;
+grant execute on function public.editar_detalles(uuid, text, timestamptz, timestamptz) to authenticated;
 
 
 -- ============================================================
