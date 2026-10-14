@@ -665,6 +665,29 @@ $$;
 revoke all on function public.guardar_suscripcion(text, text, text, text, jsonb) from public, anon;
 grant execute on function public.guardar_suscripcion(text, text, text, text, jsonb) to authenticated;
 
+-- Qué avisos quiere recibir cada quien: en su cuenta (valen en todos sus
+-- equipos) y copiadas a sus suscripciones push. Solo interruptores sí/no.
+alter table public.profiles add column if not exists noti_prefs jsonb not null default '{}'::jsonb;
+
+create or replace function public.guardar_prefs_notificaciones(p_prefs jsonb)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  limpio jsonb;
+begin
+  if auth.uid() is null then raise exception 'No autenticado'; end if;
+  select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) into limpio
+    from jsonb_each(coalesce(p_prefs, '{}'::jsonb))
+   where key ~ '^[a-z_]{1,40}$' and jsonb_typeof(value) = 'boolean';
+  update public.profiles set noti_prefs = limpio where id = auth.uid();
+  update public.push_suscripciones set prefs = limpio where user_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.guardar_prefs_notificaciones(jsonb) from public, anon;
+grant execute on function public.guardar_prefs_notificaciones(jsonb) to authenticated;
+
 
 -- ============================================================
 -- 12) PERMISOS DEL TIEMPO REAL (canales privados)

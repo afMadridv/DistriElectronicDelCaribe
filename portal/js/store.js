@@ -25,7 +25,7 @@
 
   /* perfil que usa la app (el demo guarda la misma forma) */
   function perfil(u) {
-    return { id: u.id, name: u.name ?? u.full_name, email: u.email, role: u.role, firma: u.firma || null };
+    return { id: u.id, name: u.name ?? u.full_name, email: u.email, role: u.role, firma: u.firma || null, noti_prefs: u.noti_prefs || null };
   }
 
   /* Si falta correr el schema.sql nuevo, Supabase responde que no encuentra
@@ -576,6 +576,15 @@
         p_dispositivo: dispositivo, p_prefs: prefs,
       });
       if (error) throw errorDeEsquema(error, "activar las notificaciones push");
+    },
+
+    /* qué avisos quiere recibir: se guardan en la cuenta y en todas sus
+       suscripciones push (el servidor filtra con ellas) */
+    async guardarPrefsNotificaciones(prefs) {
+      if (currentProfile) currentProfile.noti_prefs = { ...prefs };
+      if (this.isDemo) return;
+      const { error } = await sb.rpc("guardar_prefs_notificaciones", { p_prefs: prefs });
+      if (error) throw errorDeEsquema(error, "guardar las preferencias de avisos");
     },
 
     async borrarSuscripcion(endpoint) {

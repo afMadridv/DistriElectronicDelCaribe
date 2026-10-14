@@ -783,6 +783,15 @@ input[type="date"]::-webkit-date-and-time-value, input[type="datetime-local"]::-
 }
 .noti-icono-btn:hover { background: var(--gray-100); color: var(--black); }
 .noti-cuerpo { overflow-y: auto; overscroll-behavior: contain; padding: 0.5rem 1.125rem 0.75rem; }
+.noti-cuerpo[hidden] { display: none; }
+.noti-tabs { display: flex; gap: 0.25rem; padding: 0.5rem 1.125rem 0; border-bottom: 1px solid var(--gray-100); }
+.noti-tab {
+  flex: 1; padding: 0.625rem 0.5rem; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: 0.875rem; font-weight: 700; color: var(--gray-500);
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.noti-tab[aria-selected="true"] { color: var(--black); border-bottom-color: var(--yellow); }
+.noti-nota { font-size: 0.78rem; line-height: 1.45; color: var(--gray-500); margin: 0.625rem 0; }
 .noti-estado { font-size: 0.8rem; line-height: 1.45; border-radius: 0.625rem; padding: 0.625rem 0.75rem; margin: 0.5rem 0; background: var(--gray-100); }
 .noti-estado.ok { background: #e8f6ee; color: #1d6b41; font-weight: 600; }
 .noti-estado.alerta { background: #fff4e5; color: #7a4a00; }

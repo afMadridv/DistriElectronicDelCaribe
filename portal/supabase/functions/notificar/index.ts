@@ -10,8 +10,9 @@
 //   ingreso / formato_*      → Jefes y Administrador (no al autor)
 //   nuevo_dispositivo        → el dueño de la cuenta, en sus OTROS equipos
 //   llamada                  → la persona a la que están llamando
-// Cada suscripción guarda sus preferencias (prefs); si apagó esa
-// categoría, no se le envía.
+// Cada quien elige en «Qué me llega» (profiles.noti_prefs) qué avisos
+// quiere y de quién (de_tecnicos / de_jefes); si lo apagó, no se le envía.
+// Las llamadas siempre llegan.
 //
 // Configuración (una sola vez):
 //   npx web-push generate-vapid-keys
@@ -158,7 +159,19 @@ Deno.serve(async (req) => {
 
     const t = texto(ev);
     if (!t) return json({ ok: true, enviadas: 0 });
-    const categoria = CATEGORIA[ev.tipo];
+    // abrir un formato en blanco = empezar uno nuevo (mismo criterio que el portal)
+    const categoria = ev.tipo === "formato_abierto" && (ev.detalle as Record<string, unknown>)?.nuevo
+      ? "formatos_nuevos" : CATEGORIA[ev.tipo];
+    const origen = ev.actor_rol === "trabajador" ? "de_tecnicos" : ev.actor_rol === "jefe" ? "de_jefes" : null;
+
+    /* lo que cada quien eligió en «Qué me llega» (en su cuenta) */
+    if (categoria !== "llamadas") {
+      const { data: perfiles } = await admin.from("profiles").select("id, noti_prefs").in("id", destinatarios);
+      const quiere = (p: Record<string, boolean>) => p[categoria] !== false && !(origen && p[origen] === false);
+      const siQuieren = new Set((perfiles ?? []).filter((p) => quiere(p.noti_prefs ?? {})).map((p) => p.id));
+      destinatarios = destinatarios.filter((id) => siQuieren.has(id));
+      if (!destinatarios.length) return json({ ok: true, enviadas: 0 });
+    }
 
     const { data: subs } = await admin.from("push_suscripciones").select("*").in("user_id", destinatarios);
     const payload = JSON.stringify({
@@ -173,7 +186,6 @@ Deno.serve(async (req) => {
     let enviadas = 0;
     await Promise.all((subs ?? []).map(async (s) => {
       if (excluirDispositivo && s.dispositivo === excluirDispositivo) return;
-      if (categoria !== "llamadas" && (s.prefs ?? {})[categoria] === false) return;
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
