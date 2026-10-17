@@ -281,7 +281,9 @@
       case "formato_editando":
         return { titulo: `${quien} está editando un formato`, cuerpo: doc || "Formato", accion: abrir, textoAccion: "Abrir" };
       case "formato_completado":
-        return { titulo: d.firmado ? `${quien} completó y firmó un formato` : `${quien} completó un formato`,
+        // guardado = lo dejó en el historial para seguir después, sin descargarlo
+        return { titulo: d.guardado ? `${quien} guardó un formato para seguir después`
+          : d.firmado ? `${quien} completó y firmó un formato` : `${quien} completó un formato`,
           cuerpo: doc || "Formato", accion: abrir, textoAccion: "Abrir" };
       case "nuevo_dispositivo":
         return { titulo: "Nuevo inicio de sesión en tu cuenta",

@@ -81,7 +81,11 @@ function texto(ev: Evento) {
     case "formato_editando":
       return { titulo: `${quien} está editando un formato`, cuerpo: doc, url: abrir };
     case "formato_completado":
-      return { titulo: d.firmado ? `${quien} completó y firmó un formato` : `${quien} completó un formato`, cuerpo: doc, url: abrir };
+      return {
+        titulo: d.guardado ? `${quien} guardó un formato para seguir después`
+          : d.firmado ? `${quien} completó y firmó un formato` : `${quien} completó un formato`,
+        cuerpo: doc, url: abrir,
+      };
     case "nuevo_dispositivo":
       return {
         titulo: "Nuevo inicio de sesión en tu cuenta",

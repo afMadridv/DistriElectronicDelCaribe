@@ -23,7 +23,7 @@
     el.className = `toast ${type}`;
     clearTimeout(el._t);
     // los errores se quedan más tiempo: en 2,6 s no alcanzaban a leerse
-    el._t = setTimeout(() => el.classList.add("hidden"), type === "error" ? 8000 : 2600);
+    el._t = setTimeout(() => el.classList.add("hidden"), type === "error" ? 8000 : Math.max(2600, msg.length * 60));
   }
 
   /* fetch solo dice «Failed to fetch» (Chrome), «Load failed» (Safari) o
@@ -189,7 +189,7 @@
       modal.querySelector("[data-close-modal]").onclick = null;
     };
     $("#exit-save").onclick = async () => {
-      const ok = await saveCotizacion(false);
+      const ok = await saveCotizacion("guardar");
       close();
       if (ok) proceed();
     };
@@ -382,6 +382,8 @@
   let calculadores = {};      // campo origen → [recalcular, …]
   let firmasTocadas = new Set();
   let aviseEdicion = false;   // «empezó a editar» se registra una sola vez
+  let aviseGuardado = false;  // y «guardó para seguir después», también
+  let avisoCompletado = false; // «completó» una vez por versión guardada
 
   const campoDef = (clave) => currentFormat && FORMATS[currentFormat].fields.find((f) => f.key === clave);
 
@@ -569,6 +571,7 @@
     calculadores = {};
     firmasTocadas = new Set();
     aviseEdicion = false;
+    aviseGuardado = avisoCompletado = false;
     const format = FORMATS[formatKey];
     const data = record ? record.data : importado ? importado.data || {} : {};
 
@@ -576,7 +579,6 @@
     $("#form-wrap").classList.remove("hidden");
     $("#current-format-name").textContent = (record ? `Editando ${record.numero} — `
       : importado ? `Importado${numeroImportado ? " " + numeroImportado : ""} — ` : "") + format.name;
-    $("#generate-btn-label").textContent = record ? "Guardar cambios y descargar PDF" : "Generar PDF";
     $("#save-status").textContent = "";
 
     const form = $("#dynamic-form");
@@ -1181,9 +1183,10 @@
     } finally { btn.disabled = false; }
   });
 
-  $("#generate-btn").addEventListener("click", () => saveCotizacion(true));
+  $("#save-btn").addEventListener("click", () => saveCotizacion("guardar"));
+  $("#generate-btn").addEventListener("click", () => saveCotizacion("descargar"));
+  $("#wsp-btn").addEventListener("click", () => saveCotizacion("compartir"));
 
-  /* Antes de descargar se propone un nombre y se deja cambiarlo. */
   /* Antes de descargar se puede cambiar el nombre del PDF (ventana propia:
      window.prompt no siempre aparece en la app instalada). null = canceló */
   function pedirNombre(formatKey, record) {
@@ -1205,88 +1208,127 @@
     });
   }
 
-  /* guarda la cotización; download=false para "guardar y salir" */
-  async function saveCotizacion(download = true) {
+  /* Guarda el formato. modo:
+       "guardar"   → solo lo guarda: queda en el historial para seguir
+                     editándolo y descargarlo cuando esté listo (los campos
+                     obligatorios se piden al descargar, no aquí)
+       "descargar" → guarda y descarga el PDF
+       "compartir" → guarda y lo envía por WhatsApp
+     Sin cambios desde el último guardado, descargar o compartir no vuelven
+     a guardar: la «última modificación» no cambia solo por bajar el PDF. */
+  async function saveCotizacion(modo = "descargar") {
     const format = FORMATS[currentFormat];
-    // valida requeridos
-    for (const f of format.fields) {
-      if (f.required && !f.section) {
-        const el = $(`#f-${f.key}`);
-        if (el && !el.value.trim()) {
-          el.focus();
-          el.reportValidity ? el.reportValidity() : null;
-          toast(`Completa el campo: ${f.label}`, "error");
-          return false;
+    if (modo !== "guardar") {
+      for (const f of format.fields) {
+        if (f.required && !f.section) {
+          const el = $(`#f-${f.key}`);
+          if (el && !el.value.trim()) {
+            el.focus();
+            el.reportValidity ? el.reportValidity() : null;
+            toast(`Completa el campo: ${f.label}`, "error");
+            return false;
+          }
         }
       }
     }
 
-    const btn = $("#generate-btn");
-    btn.disabled = true;
-    $("#save-status").textContent = "Guardando…";
+    const yaGuardado = !!editingRecord && !formDirty;
+    if (modo === "guardar" && yaGuardado) {
+      toast("No hay cambios: el formato ya está guardado.");
+      return true;
+    }
+
+    const botones = $$(".form-actions .btn");
+    botones.forEach((b) => { b.disabled = true; });
+    $("#save-status").textContent = yaGuardado ? "Generando PDF…" : "Guardando…";
     /* etapa en curso: así el error dice qué falló y, si el registro ya
        quedó guardado, no se le hace creer al usuario que se perdió */
     let etapa = "fotos";
     let guardado = null;
     try {
-      const data = collectData();
+      let record = editingRecord;
+      if (!yaGuardado) {
+        const data = collectData();
 
-      /* sube imágenes nuevas (dataURL) al almacenamiento, de una en una:
-         en datos móviles, subirlas todas a la vez hacía que alguna se
-         cortara y el guardado entero fallaba con «Failed to fetch» */
-      for (const f of format.fields) {
-        if (f.type === "images" && Array.isArray(data[f.key])) {
-          const fotos = [];
-          for (const foto of data[f.key]) {
-            fotos.push({
-              src: String(foto.src).startsWith("data:") ? await subirFoto(foto.src) : foto.src,
-              desc: foto.desc || "",
-            });
+        /* sube imágenes nuevas (dataURL) al almacenamiento, de una en una:
+           en datos móviles, subirlas todas a la vez hacía que alguna se
+           cortara y el guardado entero fallaba con «Failed to fetch» */
+        for (const f of format.fields) {
+          if (f.type === "images" && Array.isArray(data[f.key])) {
+            const fotos = [];
+            for (const foto of data[f.key]) {
+              fotos.push({
+                src: String(foto.src).startsWith("data:") ? await subirFoto(foto.src) : foto.src,
+                desc: foto.desc || "",
+              });
+            }
+            data[f.key] = fotos;
           }
-          data[f.key] = fotos;
         }
-      }
 
-      etapa = "guardar";
-      let record;
-      if (editingRecord) {
-        record = await Store.updateCotizacion(editingRecord.id, data);
-        editingRecord = record;
-        // quienes editan el mismo formato refrescan fotos y número
-        Colaboracion.guardado(record);
-      } else {
-        record = await crearRegistro(currentFormat, data, numeroImportado, nombreImportado);
-        numeroImportado = nombreImportado = null;
-        editingRecord = record;
-        $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
-        $("#generate-btn-label").textContent = "Guardar cambios y descargar PDF";
-        // ya existe en el historial: desde ahora otros pueden entrar a editarlo
-        Colaboracion.unirse(record, ctxColaboracion());
+        etapa = "guardar";
+        if (editingRecord) {
+          record = await Store.updateCotizacion(editingRecord.id, data);
+          editingRecord = record;
+          // quienes editan el mismo formato refrescan fotos y número
+          Colaboracion.guardado(record);
+        } else {
+          record = await crearRegistro(currentFormat, data, numeroImportado, nombreImportado);
+          numeroImportado = nombreImportado = null;
+          editingRecord = record;
+          $("#current-format-name").textContent = `Editando ${record.numero} — ${format.name}`;
+          // ya existe en el historial: desde ahora otros pueden entrar a editarlo
+          Colaboracion.unirse(record, ctxColaboracion());
+        }
+        formDirty = false;
+        avisoCompletado = false;   // cambió: descargarlo de nuevo sí se avisa
+        actualizarAlmacenamiento();
       }
       guardado = record;
-      // auditoría: completó (y si firmó aquí, también firmó) el formato
-      NotificationService.registrar("formato_completado", {
-        cotizacion_id: record.id, detalle: { ...resumenDoc(record), firmado: firmasTocadas.size > 0 },
-      });
-      firmasTocadas = new Set();
-
+      $("#save-status").textContent = "✓ Guardado en el historial";
       const num = PDFGen.numeroImpreso(currentFormat, record) || record.numero;
-      const nombre = download ? await pedirNombre(currentFormat, record) : null;
-      if (download && nombre === null) toast(`Formato ${num} guardado. No se descargó el PDF.`);
-      if (nombre !== null) {
+
+      /* auditoría: «guardó para seguir después» una vez por formato abierto;
+         «completó» (y si firmó aquí, «firmó») al descargarlo o enviarlo */
+      if (modo === "guardar") {
+        if (!aviseGuardado) {
+          aviseGuardado = true;
+          NotificationService.registrar("formato_completado", {
+            cotizacion_id: record.id, detalle: { ...resumenDoc(record), guardado: true },
+          });
+        }
+        toast(`Formato ${num} guardado. Puedes seguir editándolo y descargarlo cuando esté listo.`);
+        return true;
+      }
+      if (!avisoCompletado) {
+        avisoCompletado = true;
+        NotificationService.registrar("formato_completado", {
+          cotizacion_id: record.id, detalle: { ...resumenDoc(record), firmado: firmasTocadas.size > 0 },
+        });
+        firmasTocadas = new Set();
+      }
+
+      if (modo === "compartir") {
         etapa = "pdf";
         const rec = await Store.hydrateImages(record);
-        const descarga = await PDFGen.download(currentFormat, rec, nombre);
-        const avisado = await NotificationService.formatoDescargado({
-          numero: num, formato: format.name, cliente: data.cliente, url: descarga.url, nombre: descarga.nombre,
-        });
-        // con el aviso de descargas apagado, al menos la confirmación de siempre
-        if (!avisado) toast(`PDF ${num} generado y guardado.`);
+        await compartirWhatsApp(() => PDFGen.archivo(currentFormat, rec));
+        return true;
       }
-      formDirty = false;
-      $("#save-status").textContent = "✓ Guardado en el historial";
-      if (!download) toast(`Formato ${num} guardado.`);
-      actualizarAlmacenamiento();
+
+      const nombre = await pedirNombre(currentFormat, record);
+      if (nombre === null) {
+        toast(yaGuardado ? "No se descargó el PDF." : `Formato ${num} guardado. No se descargó el PDF.`);
+        return true;
+      }
+      etapa = "pdf";
+      const rec = await Store.hydrateImages(record);
+      const descarga = await PDFGen.download(currentFormat, rec, nombre);
+      const avisado = await NotificationService.formatoDescargado({
+        numero: num, formato: format.name, cliente: (record.data || {}).cliente,
+        url: descarga.url, nombre: descarga.nombre,
+      });
+      // con el aviso de descargas apagado, al menos la confirmación de siempre
+      if (!avisado) toast(`PDF ${num} generado y guardado.`);
       return true;
     } catch (e) {
       console.error(`guardar (${etapa}):`, e);
@@ -1306,8 +1348,85 @@
       toast(`No se pudo ${que}: ${mensajeError(e)}${extra}`, "error");
       return false;
     } finally {
-      btn.disabled = false;
+      botones.forEach((b) => { b.disabled = false; });
     }
+  }
+
+  /* ============================================================
+     ENVIAR POR WHATSAPP
+     Celular, tablet y computador con Chrome o Edge: se abre «Compartir»
+     del sistema con el PDF adjunto → WhatsApp → se escoge el chat.
+     Donde el navegador no comparte archivos (Firefox, Opera…): se
+     descarga el PDF y se abre WhatsApp para escoger el chat y adjuntarlo.
+     Ninguna página web puede meter un archivo directo en un chat de
+     WhatsApp: siempre pasa por «Compartir».
+     ============================================================ */
+  const comparteArchivos = (file) => {
+    try { return !!(navigator.canShare && navigator.canShare({ files: [file] })); }
+    catch { return false; }
+  };
+
+  /* Hace el envío. Tiene que correr justo después de un toque: el
+     navegador no abre «Compartir» ni ventanas nuevas sin él.
+     false = no lo dejó (hace falta otro toque) */
+  async function enviarPorWhatsApp(file) {
+    if (comparteArchivos(file)) {
+      try {
+        await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/i, "") });
+        return true;
+      } catch (e) {
+        if (e && e.name === "AbortError") return true;          // cerró el menú sin elegir
+        if (e && e.name === "NotAllowedError") return false;    // pasó mucho desde el toque
+        throw e;
+      }
+    }
+    const texto = `Te envío el formato «${file.name.replace(/\.pdf$/i, "")}» (PDF).`;
+    const ventana = window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank");
+    if (!ventana) return false;
+    ventana.opener = null;
+    descargarBlob(file, file.name);
+    toast("PDF descargado. En WhatsApp escoge el chat y adjunta el archivo (o arrástralo a la conversación).");
+    return true;
+  }
+
+  function abrirModalCompartir(file) {
+    const modal = $("#compartir-modal");
+    const peso = file.size < MB ? `${Math.max(1, Math.round(file.size / 1024))} KB` : tamano(file.size);
+    $("#comp-archivo").textContent = `${file.name} · ${peso}`;
+    $("#comp-hint").textContent = comparteArchivos(file)
+      ? "Se abre «Compartir»: toca WhatsApp y escoge el chat."
+      : "Este navegador no comparte archivos: se descarga el PDF y se abre WhatsApp para que escojas el chat y lo adjuntes.";
+    modal.classList.remove("hidden");
+    const enviar = $("#comp-enviar");
+    const cerrar = () => {
+      modal.classList.add("hidden");
+      enviar.onclick = null;
+      modal.querySelector("[data-close-modal]").onclick = null;
+    };
+    modal.querySelector("[data-close-modal]").onclick = cerrar;
+    enviar.onclick = () => {
+      enviarPorWhatsApp(file)
+        .then((ok) => {
+          if (ok) cerrar();
+          else toast("El navegador no dejó abrir WhatsApp. Toca otra vez «Elegir chat».", "error");
+        })
+        .catch((e) => { cerrar(); toast(`No se pudo compartir: ${mensajeError(e)}`, "error"); });
+    };
+    setTimeout(() => enviar.focus(), 60);
+  }
+
+  /* preparar: async () => { bytes, nombre } (PDFGen.archivo). Si el PDF se
+     armó rápido, el toque sigue vigente y se abre de una; si no, la
+     ventanita pide un toque más. */
+  async function compartirWhatsApp(preparar) {
+    const { bytes, nombre } = await preparar();
+    const file = new File([bytes], nombre, { type: "application/pdf" });
+    const vigente = navigator.userActivation ? navigator.userActivation.isActive : false;
+    if (vigente) {
+      try { if (await enviarPorWhatsApp(file)) return; }
+      catch (e) { toast(`No se pudo compartir: ${mensajeError(e)}`, "error"); return; }
+    }
+    abrirModalCompartir(file);
   }
 
   /* Reintenta la subida si se cortó la red (hasta 3 intentos). Cada intento
@@ -1638,6 +1757,7 @@
         <div class="hist-actions">
           <button class="btn btn-primary btn-sm" data-act="edit">Editar</button>
           <button class="btn btn-ghost btn-sm" data-act="pdf">PDF</button>
+          <button class="icon-btn wsp" data-act="wsp" title="Enviar por WhatsApp" aria-label="Enviar por WhatsApp">${window.ICONS.whatsapp}</button>
           <button class="icon-btn" data-act="det" title="Nombre y fechas" aria-label="Nombre y fechas">${window.ICONS.edit}</button>
           <button class="icon-btn danger" data-act="del" title="Eliminar">${window.ICONS.trash}</button>
         </div>
@@ -1669,6 +1789,20 @@
         } catch (ex) {
           toast(ex.message || "No se pudo generar el PDF.", "error");
         } finally { e.target.disabled = false; }
+      });
+      card.querySelector('[data-act="wsp"]').addEventListener("click", async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true;
+        b.classList.add("cargando");
+        try {
+          await compartirWhatsApp(async () => {
+            const rec = await Store.getCotizacion(id);
+            if (!rec || !FORMATS[rec.format_type]) throw new Error("este registro usa un formato que ya no existe.");
+            return PDFGen.archivo(rec.format_type, await Store.hydrateImages(rec));
+          });
+        } catch (ex) {
+          toast(`No se pudo preparar el PDF: ${mensajeError(ex)}`, "error");
+        } finally { b.disabled = false; b.classList.remove("cargando"); }
       });
       card.querySelector('[data-act="del"]').addEventListener("click", async () => {
         const rec = historialCache.find((c) => c.id === id);

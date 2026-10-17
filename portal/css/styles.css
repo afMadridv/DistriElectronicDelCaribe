@@ -1055,6 +1055,102 @@ body.en-llamada .toast { bottom: calc(6rem + var(--seguro-abajo)); }
   .main { padding-top: 18px; }
 }
 
+/* ============================================================
+   GUARDAR / DESCARGAR / WHATSAPP Y DISEÑO POR DISPOSITIVO
+   computador (> 1024 px) · tablet (761–1024 px) · celular (≤ 760 px)
+   ============================================================ */
+:root { --wsp: #25D366; --wsp-hover: #1ebe5b; --wsp-texto: #053b1f; --wsp-oscuro: #0f7a3d; }
+
+.btn-wsp { background: var(--wsp); color: var(--wsp-texto); }
+.btn-wsp:hover { background: var(--wsp-hover); box-shadow: 0 4px 14px rgba(37,211,102,.38); }
+.btn-wsp:focus-visible { outline: 2px solid var(--wsp-oscuro); outline-offset: 2px; }
+
+/* acciones del formulario. Computador: «Vista previa» a la izquierda y
+   Guardar · Descargar PDF · WhatsApp (solo el ícono) a la derecha.
+   Si el panel queda angosto (tablet, celular o con la vista previa al
+   lado), cuadrícula de 2 × 2 con botones grandes. Se mide el panel y no
+   la pantalla, porque el menú lateral y la vista previa le quitan ancho. */
+.form-panel { container-type: inline-size; }
+.form-actions { flex-wrap: wrap; gap: 10px; }
+.form-actions-main { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+#wsp-btn { padding-left: 13px; padding-right: 13px; }
+#wsp-btn .btn-wsp-label { display: none; }
+.save-status { order: 3; flex-basis: 100%; text-align: right; }
+.save-status:empty { display: none; }
+@container (max-width: 540px) {
+  .form-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .form-actions-main { display: contents; }
+  .form-actions .btn { width: 100%; justify-content: center; padding: 12px; }
+  #wsp-btn .btn-wsp-label { display: inline; }
+  .save-status { grid-column: 1 / -1; text-align: center; }
+}
+
+/* historial: botón de WhatsApp de cada formato */
+.icon-btn.wsp { color: var(--wsp-oscuro); }
+.icon-btn.wsp:hover { border-color: var(--wsp); color: var(--wsp-oscuro); background: #e9fbf0; }
+.icon-btn.cargando { pointer-events: none; }
+.icon-btn.cargando svg { animation: pulso 1s ease-in-out infinite; }
+
+/* ventana «Enviar por WhatsApp» */
+.wsp-cabeza { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.wsp-cabeza h3 { margin: 0; }
+.wsp-logo {
+  width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px;
+  display: grid; place-items: center; background: var(--wsp); color: var(--wsp-texto);
+}
+.wsp-logo svg { width: 24px; height: 24px; }
+.wsp-archivo { font-weight: 600; overflow-wrap: anywhere; margin-bottom: 6px; }
+
+/* ventana «Nombre y fechas». Nada se sale de lado: las fechas se
+   encogen con su columna en vez de abrir una barra horizontal. */
+.modal { overflow-x: hidden; }
+.modal-md { max-width: 560px; }
+.det-sub {
+  margin: -6px 0 18px; padding: 9px 12px; border-radius: 10px;
+  background: var(--gray-100); color: var(--gray-700);
+  font-size: 13px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere;
+}
+.det-fechas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
+.det-fechas input { min-width: 0; }
+#det-fechas-hint { display: block; margin-top: -4px; }
+.det-acciones { align-items: center; flex-wrap: wrap; }
+.det-acciones .det-contenido { margin-right: auto; }
+.det-contenido svg { flex-shrink: 0; }
+
+/* ----- tablet: tarjetas del historial en dos pisos (datos arriba,
+   botones abajo a la derecha) para que el nombre no se corte ----- */
+@media (min-width: 761px) and (max-width: 1024px) {
+  .hist-card {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas: "icono info num" "acciones acciones acciones";
+    gap: 12px 14px; align-items: center;
+  }
+  .hist-icon { grid-area: icono; }
+  .hist-info { grid-area: info; }
+  .hist-num { grid-area: num; align-self: start; }
+  .hist-actions {
+    grid-area: acciones; justify-content: flex-end;
+    padding-top: 12px; border-top: 1px solid var(--gray-100);
+  }
+  .modal-md { max-width: 600px; padding: 30px; }
+}
+
+/* ----- celular ----- */
+@media (max-width: 760px) {
+  /* nombre y fechas: una columna; Guardar primero y a todo el ancho */
+  .det-fechas { grid-template-columns: 1fr; }
+  .det-acciones { flex-direction: column; align-items: stretch; }
+  .det-acciones .btn { width: 100%; justify-content: center; }
+  .det-acciones .det-guardar { order: 1; }
+  .det-acciones .det-contenido { order: 2; margin-right: 0; }
+  .det-acciones .det-cancelar { order: 3; }
+  .modal-md { max-width: none; }
+  /* con una ventana abierta, la burbuja de llamadas no tapa sus botones */
+  body:has(.modal-overlay:not(.hidden)) .burbuja { visibility: hidden; }
+  /* historial: Editar y PDF se reparten el ancho, los íconos al lado */
+  .hist-actions .icon-btn { flex-shrink: 0; }
+}
+
 /* menos movimiento si el sistema lo pide */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

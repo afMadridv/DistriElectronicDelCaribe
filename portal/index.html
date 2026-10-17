@@ -172,16 +172,27 @@
           <div class="form-layout">
             <div class="form-panel">
               <form id="dynamic-form"></form>
+              <!-- computador: una fila; tablet y celular: cuadrícula de 2 (ver styles.css) -->
               <div class="form-actions">
-                <button class="btn btn-ghost" id="preview-btn">
+                <button type="button" class="btn btn-ghost" id="preview-btn">
                   <svg viewBox="0 0 24 24" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/></svg>
                   Vista previa
                 </button>
-                <button class="btn btn-primary" id="generate-btn">
-                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
-                  <span id="generate-btn-label">Generar PDF</span>
-                </button>
-                <span id="save-status" class="save-status"></span>
+                <div class="form-actions-main">
+                  <button type="button" class="btn btn-ghost" id="save-btn" title="Guarda en el historial para seguir editándolo después, sin descargar">
+                    <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                    Guardar
+                  </button>
+                  <button type="button" class="btn btn-primary" id="generate-btn" title="Guarda y descarga el PDF">
+                    <svg viewBox="0 0 24 24" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+                    Descargar PDF
+                  </button>
+                  <button type="button" class="btn btn-wsp" id="wsp-btn" title="Enviar el PDF por WhatsApp" aria-label="Enviar el PDF por WhatsApp">
+                    <svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21M9 10a.5.5 0 0 0 1 0V9a.5.5 0 0 0-1 0v1a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                    <span class="btn-wsp-label">WhatsApp</span>
+                  </button>
+                </div>
+                <span id="save-status" class="save-status" aria-live="polite"></span>
               </div>
             </div>
             <div class="preview-panel hidden" id="preview-panel">
@@ -307,28 +318,51 @@
   </div>
 
   <!-- ===== MODAL NOMBRE Y FECHAS DE UN FORMATO ===== -->
+  <!-- computador y tablet: ventana ancha con las fechas lado a lado;
+       celular: hoja desde abajo con todo en una columna -->
   <div id="detalles-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
+    <div class="modal modal-md">
       <h3>Nombre y fechas</h3>
-      <p class="confirm-text" id="det-sub"></p>
+      <p class="det-sub" id="det-sub"></p>
       <form id="detalles-form">
         <label class="field">
           <span>Nombre del archivo</span>
-          <input type="text" id="det-nombre" maxlength="120" autocomplete="off" />
+          <input type="text" id="det-nombre" maxlength="120" autocomplete="off" enterkeyhint="done" />
           <small class="field-hint">Sale como título en el historial y como nombre del PDF. Vacío = el nombre de siempre.</small>
         </label>
-        <div class="form-row">
+        <div class="det-fechas">
           <label class="field"><span>Creado</span><input type="datetime-local" id="det-creado" /></label>
           <label class="field"><span>Última modificación</span><input type="datetime-local" id="det-modificado" /></label>
         </div>
         <small class="field-hint" id="det-fechas-hint"></small>
         <p id="det-error" class="form-error hidden"></p>
-        <div class="modal-actions modal-actions-stack">
-          <button type="submit" class="btn btn-primary">Guardar</button>
-          <button type="button" class="btn btn-ghost" id="det-contenido">Editar contenido (datos, fecha del formato, firmas)</button>
-          <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+        <div class="modal-actions det-acciones">
+          <button type="button" class="btn btn-ghost det-contenido" id="det-contenido" title="Datos, fecha del formato y firmas">
+            <svg viewBox="0 0 24 24" width="17" height="17"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            Editar contenido
+          </button>
+          <button type="button" class="btn btn-ghost det-cancelar" data-close-modal>Cancelar</button>
+          <button type="submit" class="btn btn-primary det-guardar">Guardar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ===== MODAL ENVIAR POR WHATSAPP =====
+       el navegador solo abre «Compartir» justo después de un toque: si el
+       PDF tardó en armarse, este botón da ese toque -->
+  <div id="compartir-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="wsp-cabeza">
+        <span class="wsp-logo"><svg viewBox="0 0 24 24"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21M9 10a.5.5 0 0 0 1 0V9a.5.5 0 0 0-1 0v1a5 5 0 0 0 5 5h1a.5.5 0 0 0 0-1h-1a.5.5 0 0 0 0 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>
+        <h3>Enviar por WhatsApp</h3>
+      </div>
+      <p class="wsp-archivo" id="comp-archivo"></p>
+      <p class="field-hint" id="comp-hint"></p>
+      <div class="modal-actions modal-actions-stack">
+        <button type="button" class="btn btn-wsp" id="comp-enviar">Elegir chat</button>
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancelar</button>
+      </div>
     </div>
   </div>
 
